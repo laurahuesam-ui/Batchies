@@ -1,13 +1,13 @@
 {
-  "name": "Batchies – Produktentwicklung",
-  "short_name": "Batchies",
-  "description": "Produktideen, Kosten, Etsy-Gebühren, Verkaufspreise und Margen planen.",
-  "start_url": "./index.html",
-  "scope": "./",
-  "display": "standalone",
-  "background_color": "#f7f7f9",
-  "theme_color": "#111827",
-  "icons": [
+  "name":"Batchies – Produktentwicklung",
+  "short_name":"Batchies",
+  "description":"Produkt- und Batch-Stammdaten, Lieferantenvergleich, Etsy-Kalkulation und CSV-Export.",
+  "start_url":"./index.html",
+  "scope":"./",
+  "display":"standalone",
+  "background_color":"#f4f6f2",
+  "theme_color":"#24513b",
+  "icons":[
     {"src":"icon-192.png","sizes":"192x192","type":"image/png"},
     {"src":"icon-512.png","sizes":"512x512","type":"image/png"}
   ]
