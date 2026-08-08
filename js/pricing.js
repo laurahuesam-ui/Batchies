@@ -1,6 +1,9 @@
 function variableFeeRate(p){const s=state.settings;let r=(s.transactionPct+s.paymentPct)/100;if(p?.useOffsite)r+=s.offsitePct/100;if(p?.useCurrency)r+=s.currencyPct/100;return r}
 function fixedFees(p){const s=state.settings;let f=s.listingFee+s.paymentFixed;if(p?.useSetup&&s.setupSales>0)f+=s.setupFee/s.setupSales;return f}
-function supplierUnitShipping(s){return s?num(s.totalShipping)/Math.max(1,num(s.minOrderQty,1)):0}
+function supplierQtyBase(s){if(!s)return 1;return s.priceType==='set'?Math.max(1,num(s.setQty,1)):Math.max(1,num(s.minOrderQty,1))}
+function supplierUnitPrice(s){if(!s)return 0;if(s.priceType==='set')return num(s.setPrice)/Math.max(1,num(s.setQty,1));return num(s.price)}
+function supplierUnitShipping(s){return s?num(s.totalShipping)/supplierQtyBase(s):0}
+function supplierOrderCost(s){if(!s)return 0;return s.priceType==='set'?num(s.setPrice)+num(s.totalShipping):supplierUnitPrice(s)*Math.max(1,num(s.minOrderQty,1))+num(s.totalShipping)}
 function productInboundShipping(p){const s=(p.suppliers||[]).find(x=>x.preferred)||(p.suppliers||[])[0];return supplierUnitShipping(s)}
 function productPurchaseCost(p){return num(p.basePrice)+productInboundShipping(p)+(p.costs||[]).reduce((a,c)=>a+num(c.amount),0)}
 function costTotal(p){return productPurchaseCost(p)+num(p.shippingCost)}
