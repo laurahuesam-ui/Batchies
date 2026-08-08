@@ -1,0 +1,1683 @@
+{
+  "categories": {
+    "Geschenksets": [
+      "Geburtstag",
+      "Weihnachten",
+      "Ostern",
+      "Muttertag",
+      "Vatertag",
+      "Valentinstag",
+      "Hochzeit",
+      "Verlobung",
+      "Baby & Geburt",
+      "Taufe",
+      "Kommunion & Konfirmation",
+      "Einschulung",
+      "Lehrer & Erzieher",
+      "Danke",
+      "Abschied",
+      "Jubiläum",
+      "Firmen & Mitarbeiter",
+      "Personalisierte Sets"
+    ],
+    "Wohnen & Deko": [
+      "Kerzen",
+      "Duftkerzen & Raumduft",
+      "Kerzenhalter",
+      "Vasen",
+      "Bilder & Poster",
+      "Wanddeko",
+      "Holzdeko",
+      "Trockenblumen & Kränze",
+      "Figuren & Skulpturen",
+      "Aufbewahrung",
+      "Kissen & Decken",
+      "Tischdeko",
+      "Spiegel",
+      "Lampen & Lichtdeko"
+    ],
+    "Küche & Trinken": [
+      "Tassen & Becher",
+      "Gläser",
+      "Trinkflaschen",
+      "Thermobecher",
+      "Schneidebretter",
+      "Gewürze & Gewürzsets",
+      "Gewürzgläser",
+      "Küchenhelfer",
+      "Untersetzer",
+      "Lunchboxen",
+      "Vorratsbehälter",
+      "Backzubehör",
+      "Servieren & Tabletts",
+      "Kaffee & Tee Zubehör"
+    ],
+    "Garten": [
+      "Saatgut",
+      "Anzucht & Saatgut",
+      "Pflanzgefäße",
+      "Pflanzenschilder",
+      "Gartendeko",
+      "Bewässerung",
+      "Kräuter",
+      "Gemüse",
+      "Blumen",
+      "Hochbeet",
+      "Erntehelfer",
+      "Pflanzenstützen & Clips",
+      "Werkzeug & Gartenhelfer",
+      "Aufbewahrung Garten"
+    ],
+    "Wellness & Spa": [
+      "Badebomben",
+      "Badesalz",
+      "Seife",
+      "Kerzen & Entspannung",
+      "Gesichtspflege",
+      "Körperpflege",
+      "Massage",
+      "Duftöle & Aromatherapie",
+      "Schlaf & Entspannung",
+      "Wellness-Sets",
+      "Badezubehör"
+    ],
+    "Haustiere": [
+      "Hund",
+      "Katze",
+      "Pferd",
+      "Kleintiere",
+      "Vogel",
+      "Futter & Leckerlis",
+      "Spielzeug",
+      "Pflege",
+      "Halsband & Leine",
+      "Futterplatz",
+      "Aufbewahrung",
+      "Geschenke für Tierhalter"
+    ],
+    "Baby & Kinder": [
+      "Babygeschenke",
+      "Spielzeug",
+      "Lernmaterial",
+      "Kinderzimmer",
+      "Basteln",
+      "Schulanfang",
+      "Meilensteine",
+      "Aufbewahrung",
+      "Essenszubehör",
+      "Kinderkleidung & Accessoires",
+      "Namensartikel"
+    ],
+    "Beauty": [
+      "Hautpflege",
+      "Lippenpflege",
+      "Haarpflege",
+      "Kosmetik",
+      "Make-up Zubehör",
+      "Spiegel",
+      "Organizer",
+      "Nagelpflege",
+      "Beauty-Sets",
+      "Reisezubehör Beauty"
+    ],
+    "Schmuck": [
+      "Halsketten",
+      "Armbänder",
+      "Ohrringe",
+      "Ringe",
+      "Schmuckboxen",
+      "Charms & Anhänger",
+      "Fußkettchen",
+      "Schmucksets",
+      "Personalisierter Schmuck"
+    ],
+    "Kleidung & Accessoires": [
+      "T-Shirts",
+      "Hoodies & Pullover",
+      "Taschen & Beutel",
+      "Mützen & Caps",
+      "Schals",
+      "Schlüsselanhänger",
+      "Geldbörsen",
+      "Socken",
+      "Haarschmuck",
+      "Brillenetuis",
+      "Gürtel",
+      "Accessoire-Sets"
+    ],
+    "Büro & Schule": [
+      "Notizbücher",
+      "Kalender",
+      "Planer",
+      "Sticker",
+      "Stifte",
+      "Büroorganisation",
+      "Mappen & Ordner",
+      "Schreibtischzubehör",
+      "Lesezeichen",
+      "Karten & Postkarten",
+      "Etiketten",
+      "Schulzubehör"
+    ],
+    "Basteln & DIY": [
+      "Bastelsets",
+      "Makramee",
+      "Häkeln",
+      "Stricken",
+      "Resin",
+      "Laser",
+      "3D-Druck DIY",
+      "Plotter",
+      "Silikonformen",
+      "Perlen & Schmuckbasteln",
+      "Papierbasteln",
+      "Rohlinge",
+      "Werkzeuge & Zubehör",
+      "Farben & Stifte"
+    ],
+    "Gaming": [
+      "Controller-Zubehör",
+      "Schreibtisch & Setup",
+      "RGB & Licht",
+      "Gaming-Deko",
+      "Kartenhalter",
+      "Headset-Zubehör",
+      "Kabelmanagement",
+      "Aufbewahrung",
+      "Geschenkideen Gaming"
+    ],
+    "Auto": [
+      "Organizer",
+      "Reinigung",
+      "Schlüsselanhänger",
+      "Duft",
+      "Handyhalterung",
+      "Kofferraum",
+      "Getränkehalter",
+      "Pflegezubehör",
+      "Geschenkideen Auto"
+    ],
+    "Outdoor": [
+      "Camping",
+      "Wandern",
+      "Picknick",
+      "Reise",
+      "Survival",
+      "Trinkzubehör",
+      "Organisation",
+      "Licht & Laternen",
+      "Outdoor-Küche",
+      "Geschenkideen Outdoor"
+    ],
+    "Hochzeit": [
+      "Gastgeschenke",
+      "Ringboxen",
+      "Deko",
+      "Braut",
+      "Bräutigam",
+      "Trauzeugen",
+      "Einladungen & Papeterie",
+      "Tischdeko",
+      "Schilder",
+      "Erinnerungen & Gästebuch",
+      "Junggesellenabschied"
+    ],
+    "Saison": [
+      "Weihnachten",
+      "Ostern",
+      "Halloween",
+      "Frühling",
+      "Sommer",
+      "Herbst",
+      "Winter",
+      "Silvester",
+      "Advent",
+      "Nikolaus"
+    ],
+    "Spielzeug": [
+      "Holzspielzeug",
+      "Puzzle",
+      "Lernspielzeug",
+      "Kuscheltiere",
+      "Rollenspiel",
+      "Motorik",
+      "Outdoor-Spielzeug",
+      "Reisespielzeug",
+      "Kreativspielzeug"
+    ],
+    "Reitsport": [
+      "Stall",
+      "Putzen & Pflege",
+      "Futter & Leckerlis",
+      "Sattelkammer",
+      "Turnier",
+      "Geschenkideen",
+      "Halfter & Stricke",
+      "Reitzubehör",
+      "Aufbewahrung",
+      "Pferdepflege"
+    ],
+    "POD": [
+      "T-Shirts",
+      "Hoodies",
+      "Poster",
+      "Leinwand",
+      "Tassen",
+      "Handyhüllen",
+      "Taschen",
+      "Kissen",
+      "Notizbücher",
+      "Sticker",
+      "Trinkflaschen"
+    ],
+    "3D-Druck": [
+      "Ersatzteile",
+      "Haushalt",
+      "Garten",
+      "Stall",
+      "Büro",
+      "Werkzeug",
+      "Organisation",
+      "Küche",
+      "Halterungen",
+      "Spielzeug & Modelle",
+      "Deko",
+      "Personalisierung"
+    ],
+    "Verpackung": [
+      "Geschenkboxen",
+      "Versandkartons",
+      "Füllmaterial",
+      "Sticker & Etiketten",
+      "Karten",
+      "Bänder",
+      "Tüten & Beutel",
+      "Seidenpapier",
+      "Schutzmaterial",
+      "Geschenkverpackung",
+      "Produktverpackung"
+    ],
+    "Technik": [
+      "Smartphone",
+      "Tablet",
+      "PC",
+      "Kabel",
+      "Halterungen",
+      "Kopfhörer-Zubehör",
+      "Ladezubehör",
+      "Smartwatch-Zubehör",
+      "Organisation",
+      "Reinigung Technik"
+    ],
+    "Sonstiges": [
+      "Noch nicht zugeordnet"
+    ]
+  },
+  "rules": [
+    [
+      "Geschenksets",
+      "Geburtstag",
+      [
+        "geburtstag",
+        "birthday",
+        "geburtstagsgeschenk"
+      ]
+    ],
+    [
+      "Geschenksets",
+      "Weihnachten",
+      [
+        "weihnachtsgeschenk",
+        "christmas gift",
+        "xmas gift"
+      ]
+    ],
+    [
+      "Geschenksets",
+      "Ostern",
+      [
+        "ostergeschenk",
+        "easter gift"
+      ]
+    ],
+    [
+      "Geschenksets",
+      "Muttertag",
+      [
+        "muttertag",
+        "mama geschenk",
+        "mother day"
+      ]
+    ],
+    [
+      "Geschenksets",
+      "Vatertag",
+      [
+        "vatertag",
+        "papa geschenk",
+        "father day"
+      ]
+    ],
+    [
+      "Geschenksets",
+      "Valentinstag",
+      [
+        "valentinstag",
+        "valentine",
+        "liebesgeschenk"
+      ]
+    ],
+    [
+      "Geschenksets",
+      "Personalisierte Sets",
+      [
+        "personalisiert",
+        "personalized gift",
+        "personalisierbar"
+      ]
+    ],
+    [
+      "Geschenksets",
+      "Firmen & Mitarbeiter",
+      [
+        "mitarbeitergeschenk",
+        "firmengeschenk",
+        "corporate gift"
+      ]
+    ],
+    [
+      "Geschenksets",
+      "Baby & Geburt",
+      [
+        "babygeschenk",
+        "geburtsgeschenk",
+        "newborn gift"
+      ]
+    ],
+    [
+      "Geschenksets",
+      "Danke",
+      [
+        "dankeschön",
+        "danke geschenk",
+        "thank you gift"
+      ]
+    ],
+    [
+      "Geschenksets",
+      "Abschied",
+      [
+        "abschiedsgeschenk",
+        "farewell gift"
+      ]
+    ],
+    [
+      "Wohnen & Deko",
+      "Kerzen",
+      [
+        "kerze",
+        "stumpenkerze",
+        "teelicht",
+        "candle"
+      ]
+    ],
+    [
+      "Wohnen & Deko",
+      "Duftkerzen & Raumduft",
+      [
+        "duftkerze",
+        "raumduft",
+        "diffuser",
+        "wax melt",
+        "duftwachs"
+      ]
+    ],
+    [
+      "Wohnen & Deko",
+      "Kerzenhalter",
+      [
+        "kerzenhalter",
+        "kerzenständer",
+        "candle holder"
+      ]
+    ],
+    [
+      "Wohnen & Deko",
+      "Vasen",
+      [
+        "vase",
+        "blumenvase"
+      ]
+    ],
+    [
+      "Wohnen & Deko",
+      "Bilder & Poster",
+      [
+        "poster",
+        "kunstdruck",
+        "wandbild",
+        "print"
+      ]
+    ],
+    [
+      "Wohnen & Deko",
+      "Wanddeko",
+      [
+        "wanddeko",
+        "wandschild",
+        "wall decor"
+      ]
+    ],
+    [
+      "Wohnen & Deko",
+      "Trockenblumen & Kränze",
+      [
+        "trockenblumen",
+        "kranz",
+        "wreath"
+      ]
+    ],
+    [
+      "Wohnen & Deko",
+      "Aufbewahrung",
+      [
+        "aufbewahrungskorb",
+        "deko box",
+        "organizer wohnen"
+      ]
+    ],
+    [
+      "Wohnen & Deko",
+      "Kissen & Decken",
+      [
+        "kissen",
+        "decke",
+        "cushion",
+        "blanket"
+      ]
+    ],
+    [
+      "Küche & Trinken",
+      "Tassen & Becher",
+      [
+        "tasse",
+        "becher",
+        "mug",
+        "kaffeebecher"
+      ]
+    ],
+    [
+      "Küche & Trinken",
+      "Gläser",
+      [
+        "trinkglas",
+        "weinglas",
+        "cocktailglas",
+        "glas set"
+      ]
+    ],
+    [
+      "Küche & Trinken",
+      "Trinkflaschen",
+      [
+        "trinkflasche",
+        "water bottle",
+        "wasserflasche"
+      ]
+    ],
+    [
+      "Küche & Trinken",
+      "Thermobecher",
+      [
+        "thermobecher",
+        "travel mug",
+        "isolierbecher"
+      ]
+    ],
+    [
+      "Küche & Trinken",
+      "Schneidebretter",
+      [
+        "schneidebrett",
+        "cutting board"
+      ]
+    ],
+    [
+      "Küche & Trinken",
+      "Gewürze & Gewürzsets",
+      [
+        "gewürzset",
+        "gewürze",
+        "spice set"
+      ]
+    ],
+    [
+      "Küche & Trinken",
+      "Gewürzgläser",
+      [
+        "gewürzglas",
+        "spice jar"
+      ]
+    ],
+    [
+      "Küche & Trinken",
+      "Untersetzer",
+      [
+        "untersetzer",
+        "coaster"
+      ]
+    ],
+    [
+      "Küche & Trinken",
+      "Lunchboxen",
+      [
+        "lunchbox",
+        "brotdose",
+        "bento"
+      ]
+    ],
+    [
+      "Küche & Trinken",
+      "Vorratsbehälter",
+      [
+        "vorratsdose",
+        "vorratsbehälter",
+        "storage jar"
+      ]
+    ],
+    [
+      "Garten",
+      "Saatgut",
+      [
+        "saatgut",
+        "samen",
+        "seed pack",
+        "samentüte"
+      ]
+    ],
+    [
+      "Garten",
+      "Anzucht & Saatgut",
+      [
+        "anzucht",
+        "anzuchttopf",
+        "anzuchtset",
+        "seed starter",
+        "pflanzset"
+      ]
+    ],
+    [
+      "Garten",
+      "Pflanzgefäße",
+      [
+        "blumentopf",
+        "pflanztopf",
+        "übertopf",
+        "plant pot"
+      ]
+    ],
+    [
+      "Garten",
+      "Pflanzenschilder",
+      [
+        "pflanzschild",
+        "pflanzenstecker",
+        "plant label"
+      ]
+    ],
+    [
+      "Garten",
+      "Bewässerung",
+      [
+        "bewässerung",
+        "tropfer",
+        "gießsystem",
+        "watering"
+      ]
+    ],
+    [
+      "Garten",
+      "Pflanzenstützen & Clips",
+      [
+        "tomatenclip",
+        "pflanzenclip",
+        "pflanzenstütze",
+        "plant clip"
+      ]
+    ],
+    [
+      "Garten",
+      "Hochbeet",
+      [
+        "hochbeet",
+        "raised bed"
+      ]
+    ],
+    [
+      "Garten",
+      "Erntehelfer",
+      [
+        "erntekorb",
+        "erntehelfer",
+        "harvest"
+      ]
+    ],
+    [
+      "Wellness & Spa",
+      "Badebomben",
+      [
+        "badebombe",
+        "badekugel",
+        "bath bomb"
+      ]
+    ],
+    [
+      "Wellness & Spa",
+      "Badesalz",
+      [
+        "badesalz",
+        "bath salt"
+      ]
+    ],
+    [
+      "Wellness & Spa",
+      "Seife",
+      [
+        "seife",
+        "soap bar",
+        "handseife"
+      ]
+    ],
+    [
+      "Wellness & Spa",
+      "Massage",
+      [
+        "massage",
+        "massage roller",
+        "massager"
+      ]
+    ],
+    [
+      "Wellness & Spa",
+      "Duftöle & Aromatherapie",
+      [
+        "duftöl",
+        "ätherisches öl",
+        "aroma oil",
+        "essential oil"
+      ]
+    ],
+    [
+      "Wellness & Spa",
+      "Schlaf & Entspannung",
+      [
+        "schlafmaske",
+        "sleep mask",
+        "entspannung"
+      ]
+    ],
+    [
+      "Wellness & Spa",
+      "Wellness-Sets",
+      [
+        "wellness set",
+        "spa set",
+        "spa gift"
+      ]
+    ],
+    [
+      "Haustiere",
+      "Hund",
+      [
+        "hund",
+        "dog",
+        "welpe",
+        "puppy"
+      ]
+    ],
+    [
+      "Haustiere",
+      "Katze",
+      [
+        "katze",
+        "cat",
+        "kater"
+      ]
+    ],
+    [
+      "Haustiere",
+      "Pferd",
+      [
+        "pferd",
+        "horse",
+        "pony"
+      ]
+    ],
+    [
+      "Haustiere",
+      "Kleintiere",
+      [
+        "kaninchen",
+        "hase",
+        "hamster",
+        "meerschweinchen"
+      ]
+    ],
+    [
+      "Haustiere",
+      "Vogel",
+      [
+        "vogel",
+        "bird",
+        "papagei"
+      ]
+    ],
+    [
+      "Haustiere",
+      "Halsband & Leine",
+      [
+        "hundeleine",
+        "halsband",
+        "leash",
+        "collar"
+      ]
+    ],
+    [
+      "Haustiere",
+      "Futterplatz",
+      [
+        "futternapf",
+        "napf",
+        "feeding bowl"
+      ]
+    ],
+    [
+      "Haustiere",
+      "Spielzeug",
+      [
+        "hundespielzeug",
+        "katzenspielzeug",
+        "pet toy"
+      ]
+    ],
+    [
+      "Baby & Kinder",
+      "Babygeschenke",
+      [
+        "babygeschenk",
+        "newborn gift",
+        "geburtsgeschenk"
+      ]
+    ],
+    [
+      "Baby & Kinder",
+      "Meilensteine",
+      [
+        "meilensteinkarte",
+        "milestone card",
+        "baby milestone"
+      ]
+    ],
+    [
+      "Baby & Kinder",
+      "Schulanfang",
+      [
+        "einschulung",
+        "schulanfang",
+        "school starter"
+      ]
+    ],
+    [
+      "Baby & Kinder",
+      "Lernmaterial",
+      [
+        "lernspiel",
+        "lernmaterial",
+        "learning cards"
+      ]
+    ],
+    [
+      "Baby & Kinder",
+      "Kinderzimmer",
+      [
+        "kinderzimmer",
+        "nursery decor"
+      ]
+    ],
+    [
+      "Baby & Kinder",
+      "Namensartikel",
+      [
+        "namensschild kinder",
+        "name sign baby",
+        "personalisiertes baby"
+      ]
+    ],
+    [
+      "Beauty",
+      "Hautpflege",
+      [
+        "hautpflege",
+        "skincare",
+        "gesichtscreme",
+        "serum"
+      ]
+    ],
+    [
+      "Beauty",
+      "Lippenpflege",
+      [
+        "lippenpflege",
+        "lip balm",
+        "lippenbalsam"
+      ]
+    ],
+    [
+      "Beauty",
+      "Haarpflege",
+      [
+        "haarpflege",
+        "hair care",
+        "haarbürste"
+      ]
+    ],
+    [
+      "Beauty",
+      "Make-up Zubehör",
+      [
+        "makeup pinsel",
+        "kosmetikpinsel",
+        "makeup brush"
+      ]
+    ],
+    [
+      "Beauty",
+      "Organizer",
+      [
+        "kosmetik organizer",
+        "makeup organizer"
+      ]
+    ],
+    [
+      "Beauty",
+      "Spiegel",
+      [
+        "kosmetikspiegel",
+        "makeup mirror"
+      ]
+    ],
+    [
+      "Schmuck",
+      "Halsketten",
+      [
+        "halskette",
+        "necklace"
+      ]
+    ],
+    [
+      "Schmuck",
+      "Armbänder",
+      [
+        "armband",
+        "bracelet"
+      ]
+    ],
+    [
+      "Schmuck",
+      "Ohrringe",
+      [
+        "ohrring",
+        "earring"
+      ]
+    ],
+    [
+      "Schmuck",
+      "Ringe",
+      [
+        "ring",
+        "fingerring"
+      ]
+    ],
+    [
+      "Schmuck",
+      "Schmuckboxen",
+      [
+        "schmuckbox",
+        "jewelry box"
+      ]
+    ],
+    [
+      "Schmuck",
+      "Charms & Anhänger",
+      [
+        "charms",
+        "anhänger schmuck",
+        "pendant"
+      ]
+    ],
+    [
+      "Kleidung & Accessoires",
+      "T-Shirts",
+      [
+        "t-shirt",
+        "tshirt",
+        "shirt"
+      ]
+    ],
+    [
+      "Kleidung & Accessoires",
+      "Hoodies & Pullover",
+      [
+        "hoodie",
+        "pullover",
+        "sweatshirt"
+      ]
+    ],
+    [
+      "Kleidung & Accessoires",
+      "Taschen & Beutel",
+      [
+        "stoffbeutel",
+        "tote bag",
+        "handtasche",
+        "shopper"
+      ]
+    ],
+    [
+      "Kleidung & Accessoires",
+      "Mützen & Caps",
+      [
+        "mütze",
+        "beanie",
+        "cap"
+      ]
+    ],
+    [
+      "Kleidung & Accessoires",
+      "Schlüsselanhänger",
+      [
+        "schlüsselanhänger",
+        "keychain"
+      ]
+    ],
+    [
+      "Kleidung & Accessoires",
+      "Geldbörsen",
+      [
+        "geldbörse",
+        "wallet"
+      ]
+    ],
+    [
+      "Kleidung & Accessoires",
+      "Haarschmuck",
+      [
+        "haarklammer",
+        "haarband",
+        "scrunchie"
+      ]
+    ],
+    [
+      "Büro & Schule",
+      "Notizbücher",
+      [
+        "notizbuch",
+        "notebook",
+        "journal"
+      ]
+    ],
+    [
+      "Büro & Schule",
+      "Kalender",
+      [
+        "kalender",
+        "calendar"
+      ]
+    ],
+    [
+      "Büro & Schule",
+      "Planer",
+      [
+        "planer",
+        "planner",
+        "wochenplaner"
+      ]
+    ],
+    [
+      "Büro & Schule",
+      "Sticker",
+      [
+        "sticker",
+        "aufkleber"
+      ]
+    ],
+    [
+      "Büro & Schule",
+      "Stifte",
+      [
+        "stift",
+        "kugelschreiber",
+        "marker",
+        "pen"
+      ]
+    ],
+    [
+      "Büro & Schule",
+      "Lesezeichen",
+      [
+        "lesezeichen",
+        "bookmark"
+      ]
+    ],
+    [
+      "Büro & Schule",
+      "Karten & Postkarten",
+      [
+        "grußkarte",
+        "postkarte",
+        "greeting card"
+      ]
+    ],
+    [
+      "Büro & Schule",
+      "Etiketten",
+      [
+        "etikett",
+        "label sticker"
+      ]
+    ],
+    [
+      "Basteln & DIY",
+      "Makramee",
+      [
+        "makramee",
+        "macrame"
+      ]
+    ],
+    [
+      "Basteln & DIY",
+      "Häkeln",
+      [
+        "häkeln",
+        "crochet"
+      ]
+    ],
+    [
+      "Basteln & DIY",
+      "Stricken",
+      [
+        "stricken",
+        "knitting"
+      ]
+    ],
+    [
+      "Basteln & DIY",
+      "Resin",
+      [
+        "resin",
+        "epoxidharz",
+        "kunstharz"
+      ]
+    ],
+    [
+      "Basteln & DIY",
+      "Silikonformen",
+      [
+        "silikonform",
+        "silicone mold"
+      ]
+    ],
+    [
+      "Basteln & DIY",
+      "Plotter",
+      [
+        "plotter",
+        "vinylfolie",
+        "cricut"
+      ]
+    ],
+    [
+      "Basteln & DIY",
+      "Rohlinge",
+      [
+        "rohling",
+        "blank",
+        "sublimation blank"
+      ]
+    ],
+    [
+      "Basteln & DIY",
+      "Bastelsets",
+      [
+        "bastelset",
+        "diy kit",
+        "craft kit"
+      ]
+    ],
+    [
+      "Gaming",
+      "Controller-Zubehör",
+      [
+        "controller",
+        "gamepad",
+        "controller stand"
+      ]
+    ],
+    [
+      "Gaming",
+      "RGB & Licht",
+      [
+        "gaming rgb",
+        "rgb light",
+        "led gaming"
+      ]
+    ],
+    [
+      "Gaming",
+      "Headset-Zubehör",
+      [
+        "headset halter",
+        "headphone stand"
+      ]
+    ],
+    [
+      "Gaming",
+      "Kartenhalter",
+      [
+        "kartenhalter gaming",
+        "card holder game"
+      ]
+    ],
+    [
+      "Auto",
+      "Organizer",
+      [
+        "auto organizer",
+        "kofferraum organizer",
+        "car organizer"
+      ]
+    ],
+    [
+      "Auto",
+      "Reinigung",
+      [
+        "autoreinigung",
+        "car cleaning",
+        "detailing"
+      ]
+    ],
+    [
+      "Auto",
+      "Duft",
+      [
+        "autoduft",
+        "car fragrance",
+        "lufterfrischer auto"
+      ]
+    ],
+    [
+      "Auto",
+      "Handyhalterung",
+      [
+        "auto handyhalter",
+        "car phone holder"
+      ]
+    ],
+    [
+      "Outdoor",
+      "Camping",
+      [
+        "camping",
+        "campingzubehör"
+      ]
+    ],
+    [
+      "Outdoor",
+      "Wandern",
+      [
+        "wandern",
+        "hiking",
+        "trekking"
+      ]
+    ],
+    [
+      "Outdoor",
+      "Picknick",
+      [
+        "picknick",
+        "picnic"
+      ]
+    ],
+    [
+      "Outdoor",
+      "Reise",
+      [
+        "reise organizer",
+        "travel organizer",
+        "reise zubehör"
+      ]
+    ],
+    [
+      "Outdoor",
+      "Survival",
+      [
+        "survival",
+        "notfallset outdoor"
+      ]
+    ],
+    [
+      "Hochzeit",
+      "Gastgeschenke",
+      [
+        "gastgeschenk hochzeit",
+        "wedding favor"
+      ]
+    ],
+    [
+      "Hochzeit",
+      "Ringboxen",
+      [
+        "ringbox",
+        "ring box wedding"
+      ]
+    ],
+    [
+      "Hochzeit",
+      "Einladungen & Papeterie",
+      [
+        "hochzeitseinladung",
+        "wedding invitation"
+      ]
+    ],
+    [
+      "Hochzeit",
+      "Tischdeko",
+      [
+        "tischdeko hochzeit",
+        "wedding table"
+      ]
+    ],
+    [
+      "Hochzeit",
+      "Schilder",
+      [
+        "hochzeitsschild",
+        "wedding sign"
+      ]
+    ],
+    [
+      "Hochzeit",
+      "Erinnerungen & Gästebuch",
+      [
+        "gästebuch",
+        "guest book wedding"
+      ]
+    ],
+    [
+      "Saison",
+      "Weihnachten",
+      [
+        "weihnachten",
+        "christmas",
+        "xmas",
+        "advent"
+      ]
+    ],
+    [
+      "Saison",
+      "Ostern",
+      [
+        "ostern",
+        "easter"
+      ]
+    ],
+    [
+      "Saison",
+      "Halloween",
+      [
+        "halloween"
+      ]
+    ],
+    [
+      "Saison",
+      "Frühling",
+      [
+        "frühling",
+        "spring decor"
+      ]
+    ],
+    [
+      "Saison",
+      "Sommer",
+      [
+        "sommer",
+        "summer decor"
+      ]
+    ],
+    [
+      "Saison",
+      "Herbst",
+      [
+        "herbst",
+        "autumn decor",
+        "fall decor"
+      ]
+    ],
+    [
+      "Saison",
+      "Winter",
+      [
+        "winter",
+        "winter decor"
+      ]
+    ],
+    [
+      "Saison",
+      "Silvester",
+      [
+        "silvester",
+        "new year"
+      ]
+    ],
+    [
+      "Spielzeug",
+      "Holzspielzeug",
+      [
+        "holzspielzeug",
+        "wooden toy"
+      ]
+    ],
+    [
+      "Spielzeug",
+      "Puzzle",
+      [
+        "puzzle"
+      ]
+    ],
+    [
+      "Spielzeug",
+      "Lernspielzeug",
+      [
+        "lernspielzeug",
+        "educational toy"
+      ]
+    ],
+    [
+      "Spielzeug",
+      "Kuscheltiere",
+      [
+        "kuscheltier",
+        "plush",
+        "stuffed animal"
+      ]
+    ],
+    [
+      "Spielzeug",
+      "Motorik",
+      [
+        "motorikspielzeug",
+        "motor skills toy"
+      ]
+    ],
+    [
+      "Reitsport",
+      "Stall",
+      [
+        "stallzubehör",
+        "stall organizer",
+        "stable"
+      ]
+    ],
+    [
+      "Reitsport",
+      "Putzen & Pflege",
+      [
+        "putzbürste",
+        "striegel",
+        "putzzeug",
+        "grooming horse"
+      ]
+    ],
+    [
+      "Reitsport",
+      "Futter & Leckerlis",
+      [
+        "pferdeleckerli",
+        "horse treats",
+        "futtereimer pferd"
+      ]
+    ],
+    [
+      "Reitsport",
+      "Sattelkammer",
+      [
+        "sattelkammer",
+        "saddle room",
+        "trensenhalter"
+      ]
+    ],
+    [
+      "Reitsport",
+      "Turnier",
+      [
+        "turnierzubehör",
+        "turnier pferd",
+        "competition horse"
+      ]
+    ],
+    [
+      "Reitsport",
+      "Halfter & Stricke",
+      [
+        "halfter",
+        "führstrick",
+        "lead rope"
+      ]
+    ],
+    [
+      "POD",
+      "T-Shirts",
+      [
+        "print on demand t-shirt",
+        "pod shirt"
+      ]
+    ],
+    [
+      "POD",
+      "Hoodies",
+      [
+        "print on demand hoodie",
+        "pod hoodie"
+      ]
+    ],
+    [
+      "POD",
+      "Poster",
+      [
+        "print on demand poster",
+        "pod poster"
+      ]
+    ],
+    [
+      "POD",
+      "Tassen",
+      [
+        "print on demand tasse",
+        "pod mug"
+      ]
+    ],
+    [
+      "POD",
+      "Handyhüllen",
+      [
+        "print on demand handyhülle",
+        "pod phone case"
+      ]
+    ],
+    [
+      "3D-Druck",
+      "Ersatzteile",
+      [
+        "3d druck ersatzteil",
+        "3d printed replacement"
+      ]
+    ],
+    [
+      "3D-Druck",
+      "Haushalt",
+      [
+        "3d druck haushalt",
+        "3d printed household"
+      ]
+    ],
+    [
+      "3D-Druck",
+      "Garten",
+      [
+        "3d druck garten",
+        "3d printed garden"
+      ]
+    ],
+    [
+      "3D-Druck",
+      "Stall",
+      [
+        "3d druck stall",
+        "3d printed horse"
+      ]
+    ],
+    [
+      "3D-Druck",
+      "Büro",
+      [
+        "3d druck büro",
+        "3d printed office"
+      ]
+    ],
+    [
+      "3D-Druck",
+      "Halterungen",
+      [
+        "3d druck halter",
+        "3d printed holder"
+      ]
+    ],
+    [
+      "Verpackung",
+      "Geschenkboxen",
+      [
+        "geschenkbox",
+        "gift box",
+        "geschenkschachtel"
+      ]
+    ],
+    [
+      "Verpackung",
+      "Versandkartons",
+      [
+        "versandkarton",
+        "mailing box",
+        "shipping box"
+      ]
+    ],
+    [
+      "Verpackung",
+      "Füllmaterial",
+      [
+        "füllmaterial",
+        "holzwolle",
+        "shredded paper",
+        "packing filler"
+      ]
+    ],
+    [
+      "Verpackung",
+      "Sticker & Etiketten",
+      [
+        "verpackungssticker",
+        "etikett verpackung",
+        "packaging label"
+      ]
+    ],
+    [
+      "Verpackung",
+      "Bänder",
+      [
+        "geschenkband",
+        "satinband",
+        "ribbon"
+      ]
+    ],
+    [
+      "Verpackung",
+      "Tüten & Beutel",
+      [
+        "versandtasche",
+        "cellophanbeutel",
+        "papiertüte",
+        "gift bag"
+      ]
+    ],
+    [
+      "Verpackung",
+      "Seidenpapier",
+      [
+        "seidenpapier",
+        "tissue paper"
+      ]
+    ],
+    [
+      "Technik",
+      "Smartphone",
+      [
+        "smartphone zubehör",
+        "handy zubehör",
+        "phone accessory"
+      ]
+    ],
+    [
+      "Technik",
+      "Tablet",
+      [
+        "tablet zubehör",
+        "ipad zubehör"
+      ]
+    ],
+    [
+      "Technik",
+      "Kabel",
+      [
+        "kabel organizer",
+        "ladekabel",
+        "usb kabel"
+      ]
+    ],
+    [
+      "Technik",
+      "Halterungen",
+      [
+        "handyhalter",
+        "tablet halter",
+        "phone stand"
+      ]
+    ],
+    [
+      "Technik",
+      "Ladezubehör",
+      [
+        "ladegerät",
+        "charger",
+        "ladestation"
+      ]
+    ],
+    [
+      "Technik",
+      "Smartwatch-Zubehör",
+      [
+        "smartwatch armband",
+        "watch band",
+        "apple watch"
+      ]
+    ]
+  ]
+}
