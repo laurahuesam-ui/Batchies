@@ -168,7 +168,9 @@
       "Stempel & Stempelkissen",
       "Haftnotizen",
       "Mäppchen & Etuis",
-      "Lesezubehör"
+      "Lesezubehör",
+      "Korrekturmittel",
+      "Lese- & Buchtracker"
     ],
     "Basteln & DIY": [
       "Bastelsets",
@@ -184,7 +186,8 @@
       "Papierbasteln",
       "Rohlinge",
       "Werkzeuge & Zubehör",
-      "Farben & Stifte"
+      "Farben & Stifte",
+      "Washi Tape & Deko-Klebebänder"
     ],
     "Gaming": [
       "Controller-Zubehör",
@@ -348,6 +351,58 @@
     ]
   },
   "rules": [
+    [
+      "Büro & Schule",
+      "Korrekturmittel",
+      [
+        "korrekturroller",
+        "korrektur roller",
+        "correction tape",
+        "corrector tape",
+        "korrigierroller"
+      ]
+    ],
+    [
+      "Basteln & DIY",
+      "Washi Tape & Deko-Klebebänder",
+      [
+        "washi tape",
+        "washitape",
+        "deko klebeband",
+        "decorative tape"
+      ]
+    ],
+    [
+      "Büro & Schule",
+      "Lese- & Buchtracker",
+      [
+        "book tracker",
+        "buchtracker",
+        "lesetracker",
+        "reading tracker",
+        "reading log"
+      ]
+    ],
+    [
+      "Büro & Schule",
+      "Schreibtischzubehör",
+      [
+        "büroklammer",
+        "buroklammer",
+        "paper clip",
+        "paperclip"
+      ]
+    ],
+    [
+      "Büro & Schule",
+      "Stifte",
+      [
+        "filzstift",
+        "filsstift",
+        "felt tip",
+        "felt-tip pen"
+      ]
+    ],
     [
       "Kleidung & Accessoires",
       "Pins & Anstecker",
