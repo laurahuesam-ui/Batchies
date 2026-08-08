@@ -43,6 +43,29 @@ function migrateState(s){s.products=Array.isArray(s.products)?s.products:[];s.ba
     s.products.forEach(p=>{if(!p.category||!p.subcategory)return;normalizeText(p.name).split(/\s+/).filter(t=>t.length>=3&&!/^\d+$/.test(t)).forEach(t=>{const old=s.categoryLearning[t];if(old&&old.category===p.category&&old.subcategory===p.subcategory)old.count=(old.count||1)+1;else s.categoryLearning[t]={category:p.category,subcategory:p.subcategory,count:1}})});
     s.categorySchemaVersion=2;
   }
+
+  if(num(s.categorySchemaVersion)<3){
+    const fixes3={
+      'stempelkissen':['Büro & Schule','Stempel & Stempelkissen'],
+      'stempel':['Büro & Schule','Stempel & Stempelkissen'],
+      'postits':['Büro & Schule','Haftnotizen'],
+      'postits klein':['Büro & Schule','Haftnotizen'],
+      'buchlicht':['Büro & Schule','Lesezubehör'],
+      'mappchen':['Büro & Schule','Mäppchen & Etuis'],
+      'lesezeichen':['Büro & Schule','Lesezeichen'],
+      'journal':['Büro & Schule','Notizbücher'],
+      'schlusselanhanger':['Kleidung & Accessoires','Schlüsselanhänger'],
+      'anstecker':['Kleidung & Accessoires','Pins & Anstecker'],
+      'kugelschreiber':['Büro & Schule','Stifte'],
+      'leder lesezeichen in herzform':['Büro & Schule','Lesezeichen'],
+      'seitenhalter':['Büro & Schule','Lesezubehör'],
+      'sticker':['Büro & Schule','Sticker']
+    };
+    s.products.forEach(p=>{const k=normalizeText(p.name);if(fixes3[k]){p.category=fixes3[k][0];p.subcategory=fixes3[k][1]}});
+    s.categoryLearning={};
+    s.products.forEach(p=>{if(!p.category||!p.subcategory)return;normalizeText(p.name).split(/\s+/).filter(t=>t.length>=3&&!/^\d+$/.test(t)&&!['mit','und','der','die','das','klein'].includes(t)).forEach(t=>{const old=s.categoryLearning[t];if(old&&old.category===p.category&&old.subcategory===p.subcategory)old.count=(old.count||1)+1;else s.categoryLearning[t]={category:p.category,subcategory:p.subcategory,count:1}})});
+    s.categorySchemaVersion=3;
+  }
 }
 function saveState(){localStorage.setItem(STORAGE_KEY,JSON.stringify(state));renderAll()}
 function statusLabel(s){return ({idea:'Idee',research:'Recherche',prototype:'Prototyp',ready:'Verkaufsbereit'})[s]||'Idee'}

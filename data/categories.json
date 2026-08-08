@@ -149,7 +149,8 @@
       "Haarschmuck",
       "Brillenetuis",
       "Gürtel",
-      "Accessoire-Sets"
+      "Accessoire-Sets",
+      "Pins & Anstecker"
     ],
     "Büro & Schule": [
       "Notizbücher",
@@ -163,7 +164,11 @@
       "Lesezeichen",
       "Karten & Postkarten",
       "Etiketten",
-      "Schulzubehör"
+      "Schulzubehör",
+      "Stempel & Stempelkissen",
+      "Haftnotizen",
+      "Mäppchen & Etuis",
+      "Lesezubehör"
     ],
     "Basteln & DIY": [
       "Bastelsets",
@@ -343,6 +348,66 @@
     ]
   },
   "rules": [
+    [
+      "Kleidung & Accessoires",
+      "Pins & Anstecker",
+      [
+        "anstecker",
+        "pin",
+        "pins",
+        "button pin",
+        "badge"
+      ]
+    ],
+    [
+      "Büro & Schule",
+      "Lesezubehör",
+      [
+        "buchlicht",
+        "leselicht",
+        "book light",
+        "seitenhalter",
+        "page holder",
+        "lesering",
+        "page clip"
+      ]
+    ],
+    [
+      "Büro & Schule",
+      "Mäppchen & Etuis",
+      [
+        "mäppchen",
+        "maeppchen",
+        "federmäppchen",
+        "federmappchen",
+        "pencil case",
+        "stifteetui"
+      ]
+    ],
+    [
+      "Büro & Schule",
+      "Haftnotizen",
+      [
+        "postit",
+        "postits",
+        "post-it",
+        "haftnotiz",
+        "haftnotizen",
+        "sticky note",
+        "sticky notes"
+      ]
+    ],
+    [
+      "Büro & Schule",
+      "Stempel & Stempelkissen",
+      [
+        "stempel",
+        "stempelkissen",
+        "stamp",
+        "ink pad",
+        "stamping"
+      ]
+    ],
     [
       "Beauty",
       "Kosmetiktaschen & Etuis",
