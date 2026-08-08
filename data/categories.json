@@ -118,7 +118,12 @@
       "Organizer",
       "Nagelpflege",
       "Beauty-Sets",
-      "Reisezubehör Beauty"
+      "Reisezubehör Beauty",
+      "Kosmetiktaschen & Etuis",
+      "Haarschmuck",
+      "Haarpflege & Styling",
+      "Make-up Aufbewahrung",
+      "Parfüm & Duftzubehör"
     ],
     "Schmuck": [
       "Halsketten",
@@ -129,7 +134,8 @@
       "Charms & Anhänger",
       "Fußkettchen",
       "Schmucksets",
-      "Personalisierter Schmuck"
+      "Personalisierter Schmuck",
+      "Ringboxen & Schmucketuis"
     ],
     "Kleidung & Accessoires": [
       "T-Shirts",
@@ -311,9 +317,263 @@
     ],
     "Sonstiges": [
       "Noch nicht zugeordnet"
+    ],
+    "Hygiene & Gesundheit": [
+      "Desinfektion",
+      "Erste Hilfe",
+      "Mund- & Zahnpflege",
+      "Taschentücher",
+      "Wattestäbchen & Wattepads",
+      "Pillenboxen & Medikamentenaufbewahrung",
+      "Reisebehälter & Hygiene-Boxen",
+      "Hygiene-Sets"
+    ],
+    "Haushalt & Alltag": [
+      "Kleiderpflege & Fusselentfernung",
+      "Alltagshelfer",
+      "Aufbewahrung & Organisation",
+      "Reinigung",
+      "Wäschepflege"
+    ],
+    "Reise & Unterwegs": [
+      "Handventilatoren",
+      "Reiseetuis & Organizer",
+      "Reisebehälter",
+      "Unterwegs-Zubehör"
     ]
   },
   "rules": [
+    [
+      "Beauty",
+      "Kosmetiktaschen & Etuis",
+      [
+        "kosmetiktasche",
+        "kosmetik pouch",
+        "cosmetic pouch",
+        "makeup bag",
+        "make-up tasche"
+      ]
+    ],
+    [
+      "Beauty",
+      "Haarpflege & Styling",
+      [
+        "kamm mit spiegel",
+        "kamm",
+        "comb",
+        "haarbürste",
+        "haarbuerste",
+        "hair brush"
+      ]
+    ],
+    [
+      "Beauty",
+      "Haarschmuck",
+      [
+        "haarklammer",
+        "hair clip",
+        "scrunchie",
+        "haargummi",
+        "hair tie",
+        "haarband"
+      ]
+    ],
+    [
+      "Beauty",
+      "Spiegel",
+      [
+        "spiegel",
+        "kosmetikspiegel",
+        "makeup mirror",
+        "make-up mirror",
+        "mirror"
+      ]
+    ],
+    [
+      "Beauty",
+      "Lippenpflege",
+      [
+        "labello",
+        "lippenpflege",
+        "lip balm",
+        "lippenbalsam"
+      ]
+    ],
+    [
+      "Beauty",
+      "Make-up Aufbewahrung",
+      [
+        "pinseletui",
+        "makeup pinsel etui",
+        "make-up pinsel etui",
+        "brush case",
+        "schwämmchen box",
+        "schwammchen box",
+        "beauty blender case",
+        "makeup sponge case"
+      ]
+    ],
+    [
+      "Beauty",
+      "Make-up Zubehör",
+      [
+        "makeup schwämmchen",
+        "makeup schwammchen",
+        "make-up schwämmchen",
+        "make-up schwammchen",
+        "beauty blender",
+        "makeup sponge"
+      ]
+    ],
+    [
+      "Beauty",
+      "Parfüm & Duftzubehör",
+      [
+        "parfümfläschchen",
+        "parfumfläschchen",
+        "parfümfläschen",
+        "parfumflaschen",
+        "parfum atomizer",
+        "perfume atomizer",
+        "travel perfume bottle"
+      ]
+    ],
+    [
+      "Beauty",
+      "Hautpflege",
+      [
+        "handcreme",
+        "hand cream",
+        "hautpflege",
+        "skincare",
+        "gesichtscreme",
+        "serum"
+      ]
+    ],
+    [
+      "Hygiene & Gesundheit",
+      "Desinfektion",
+      [
+        "desinfektionsmittel",
+        "handdesinfektion",
+        "hand sanitizer",
+        "sanitizer"
+      ]
+    ],
+    [
+      "Hygiene & Gesundheit",
+      "Erste Hilfe",
+      [
+        "pflaster",
+        "wundpflaster",
+        "band aid",
+        "bandage strip"
+      ]
+    ],
+    [
+      "Hygiene & Gesundheit",
+      "Mund- & Zahnpflege",
+      [
+        "zahnbürste box",
+        "zahnburste box",
+        "zahnbürstenbox",
+        "toothbrush case",
+        "zahnstocher",
+        "toothpick",
+        "mundpflege",
+        "zahnpflege"
+      ]
+    ],
+    [
+      "Hygiene & Gesundheit",
+      "Taschentücher",
+      [
+        "taschentücher",
+        "taschentucher",
+        "tissues",
+        "pocket tissues"
+      ]
+    ],
+    [
+      "Hygiene & Gesundheit",
+      "Wattestäbchen & Wattepads",
+      [
+        "wattestäbchen",
+        "wattestabchen",
+        "q-tip",
+        "qtip",
+        "cotton swab",
+        "wattepad",
+        "wattepads",
+        "cotton pad"
+      ]
+    ],
+    [
+      "Hygiene & Gesundheit",
+      "Pillenboxen & Medikamentenaufbewahrung",
+      [
+        "pillenbox",
+        "pill box",
+        "pill case",
+        "medikamentenbox"
+      ]
+    ],
+    [
+      "Hygiene & Gesundheit",
+      "Reisebehälter & Hygiene-Boxen",
+      [
+        "wattepad reisebox",
+        "qtip box",
+        "q-tip box",
+        "wattestäbchen box",
+        "wattestabchen box",
+        "hygiene box",
+        "travel hygiene case"
+      ]
+    ],
+    [
+      "Haushalt & Alltag",
+      "Kleiderpflege & Fusselentfernung",
+      [
+        "fusselbürste",
+        "fusselburste",
+        "fusselrolle",
+        "lint brush",
+        "lint remover",
+        "clothes brush"
+      ]
+    ],
+    [
+      "Reise & Unterwegs",
+      "Handventilatoren",
+      [
+        "ventilator",
+        "handventilator",
+        "mini ventilator",
+        "hand fan",
+        "portable fan"
+      ]
+    ],
+    [
+      "Kleidung & Accessoires",
+      "Brillenetuis",
+      [
+        "sonnenbrillenetui",
+        "brillenetui",
+        "glasses case",
+        "sunglasses case"
+      ]
+    ],
+    [
+      "Schmuck",
+      "Ringboxen & Schmucketuis",
+      [
+        "ringbox",
+        "ring box",
+        "ringetui",
+        "ring case"
+      ]
+    ],
     [
       "Geschenksets",
       "Geburtstag",
@@ -1009,15 +1269,6 @@
       ]
     ],
     [
-      "Kleidung & Accessoires",
-      "Haarschmuck",
-      [
-        "haarklammer",
-        "haarband",
-        "scrunchie"
-      ]
-    ],
-    [
       "Büro & Schule",
       "Notizbücher",
       [
@@ -1271,14 +1522,6 @@
       [
         "gastgeschenk hochzeit",
         "wedding favor"
-      ]
-    ],
-    [
-      "Hochzeit",
-      "Ringboxen",
-      [
-        "ringbox",
-        "ring box wedding"
       ]
     ],
     [
