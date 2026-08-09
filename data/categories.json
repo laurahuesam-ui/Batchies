@@ -66,7 +66,8 @@
       "Erntehelfer",
       "Pflanzenstützen & Clips",
       "Werkzeug & Gartenhelfer",
-      "Aufbewahrung Garten"
+      "Aufbewahrung Garten",
+      "Aussaatlineale & Pflanzabstand"
     ],
     "Wellness & Spa": [
       "Badebomben",
@@ -79,7 +80,8 @@
       "Duftöle & Aromatherapie",
       "Schlaf & Entspannung",
       "Wellness-Sets",
-      "Badezubehör"
+      "Badezubehör",
+      "Stressabbau & Entspannung"
     ],
     "Haustiere": [
       "Hund",
@@ -123,7 +125,10 @@
       "Haarschmuck",
       "Haarpflege & Styling",
       "Make-up Aufbewahrung",
-      "Parfüm & Duftzubehör"
+      "Parfüm & Duftzubehör",
+      "Augenpflege",
+      "Make-up Entfernung",
+      "Beauty Tools"
     ],
     "Schmuck": [
       "Halsketten",
@@ -170,7 +175,9 @@
       "Mäppchen & Etuis",
       "Lesezubehör",
       "Korrekturmittel",
-      "Lese- & Buchtracker"
+      "Lese- & Buchtracker",
+      "Buchtaschen & Buchhüllen",
+      "Planer-Zubehör"
     ],
     "Basteln & DIY": [
       "Bastelsets",
@@ -334,7 +341,9 @@
       "Wattestäbchen & Wattepads",
       "Pillenboxen & Medikamentenaufbewahrung",
       "Reisebehälter & Hygiene-Boxen",
-      "Hygiene-Sets"
+      "Hygiene-Sets",
+      "Feuchttücher",
+      "Einmalhandtücher & Waschhandschuhe"
     ],
     "Haushalt & Alltag": [
       "Kleiderpflege & Fusselentfernung",
@@ -351,6 +360,186 @@
     ]
   },
   "rules": [
+    [
+      "Beauty",
+      "Augenpflege",
+      [
+        "augenmaske",
+        "augenpads",
+        "augen pad",
+        "eye pads",
+        "under eye patches",
+        "unteraugen pads"
+      ]
+    ],
+    [
+      "Hygiene & Gesundheit",
+      "Einmalhandtücher & Waschhandschuhe",
+      [
+        "einmalhandtuch",
+        "komprimiertes handtuch",
+        "compressed towel",
+        "einmal waschlappen"
+      ]
+    ],
+    [
+      "Verpackung",
+      "Tüten & Beutel",
+      [
+        "beutel",
+        "kleiner beutel",
+        "pouch bag"
+      ]
+    ],
+    [
+      "Büro & Schule",
+      "Buchtaschen & Buchhüllen",
+      [
+        "buchtasche",
+        "buchhülle",
+        "buchhuelle",
+        "book sleeve",
+        "book pouch"
+      ]
+    ],
+    [
+      "Büro & Schule",
+      "Planer-Zubehör",
+      [
+        "planer schablone",
+        "planner stencil",
+        "planer schablonen"
+      ]
+    ],
+    [
+      "Kleidung & Accessoires",
+      "Socken",
+      [
+        "kuschelsocken",
+        "flauschsocken",
+        "cozy socks",
+        "fuzzy socks"
+      ]
+    ],
+    [
+      "Wellness & Spa",
+      "Stressabbau & Entspannung",
+      [
+        "stressball",
+        "stress ball",
+        "anti stress ball",
+        "fidget ball"
+      ]
+    ],
+    [
+      "Büro & Schule",
+      "Planer",
+      [
+        "ringplaner",
+        "ring planner",
+        "ringbuch planer"
+      ]
+    ],
+    [
+      "Hygiene & Gesundheit",
+      "Feuchttücher",
+      [
+        "feuchttücher",
+        "feuchttucher",
+        "wet wipes",
+        "moist wipes"
+      ]
+    ],
+    [
+      "Kleidung & Accessoires",
+      "Taschen & Beutel",
+      [
+        "strandtasche",
+        "beach bag",
+        "beachtasche"
+      ]
+    ],
+    [
+      "Hygiene & Gesundheit",
+      "Mund- & Zahnpflege",
+      [
+        "zahnstocher box",
+        "zahnstocherbox",
+        "toothpick box",
+        "toothpick case"
+      ]
+    ],
+    [
+      "Büro & Schule",
+      "Schreibtischzubehör",
+      [
+        "foldback klammer",
+        "foldback clip",
+        "binder clip",
+        "mini paketöffner",
+        "paketöffner",
+        "letter opener",
+        "tacker",
+        "stapler",
+        "heftklammer",
+        "staples"
+      ]
+    ],
+    [
+      "Garten",
+      "Aussaatlineale & Pflanzabstand",
+      [
+        "abstandslineal",
+        "aussaatlineal",
+        "pflanzabstand lineal",
+        "seed spacing ruler",
+        "plant spacing ruler"
+      ]
+    ],
+    [
+      "Beauty",
+      "Make-up Entfernung",
+      [
+        "abschminktücher",
+        "abschminktucher",
+        "makeup remover wipes",
+        "make-up entfernung"
+      ]
+    ],
+    [
+      "Beauty",
+      "Nagelpflege",
+      [
+        "nagelfeile",
+        "nail file"
+      ]
+    ],
+    [
+      "Beauty",
+      "Beauty Tools",
+      [
+        "pinzette",
+        "tweezers",
+        "beauty tweezers"
+      ]
+    ],
+    [
+      "Beauty",
+      "Haarschmuck",
+      [
+        "bobby pins",
+        "haarnadeln",
+        "hair pins"
+      ]
+    ],
+    [
+      "Büro & Schule",
+      "Schulzubehör",
+      [
+        "lineal",
+        "ruler"
+      ]
+    ],
     [
       "Büro & Schule",
       "Korrekturmittel",

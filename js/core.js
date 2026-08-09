@@ -104,6 +104,38 @@ function migrateState(s){s.products=Array.isArray(s.products)?s.products:[];s.ba
     s.categorySchemaVersion=5;
   }
 
+
+  if(num(s.categorySchemaVersion)<6){
+    const fixes6={
+      'augenmaske':['Beauty','Augenpflege'],
+      'einmalhandtuch gross':['Hygiene & Gesundheit','Einmalhandtücher & Waschhandschuhe'],
+      'einmalhandtuch':['Hygiene & Gesundheit','Einmalhandtücher & Waschhandschuhe'],
+      'beutel':['Verpackung','Tüten & Beutel'],
+      'buchtasche':['Büro & Schule','Buchtaschen & Buchhüllen'],
+      'planer schablone':['Büro & Schule','Planer-Zubehör'],
+      'kuschelsocken':['Kleidung & Accessoires','Socken'],
+      'stressball':['Wellness & Spa','Stressabbau & Entspannung'],
+      'ringplaner':['Büro & Schule','Planer'],
+      'feuchttucher':['Hygiene & Gesundheit','Feuchttücher'],
+      'strandtasche':['Kleidung & Accessoires','Taschen & Beutel'],
+      'zahnstocher box':['Hygiene & Gesundheit','Mund- & Zahnpflege'],
+      'foldback klammer':['Büro & Schule','Schreibtischzubehör'],
+      'abstandslineal':['Garten','Aussaatlineale & Pflanzabstand'],
+      'abschminktucher':['Beauty','Make-up Entfernung'],
+      'nagelfeile':['Beauty','Nagelpflege'],
+      'pinzette':['Beauty','Beauty Tools'],
+      'bobby pins':['Beauty','Haarschmuck'],
+      'mini paketoffner':['Büro & Schule','Schreibtischzubehör'],
+      'lineal':['Büro & Schule','Schulzubehör'],
+      'tacker':['Büro & Schule','Schreibtischzubehör'],
+      'heftklammer':['Büro & Schule','Schreibtischzubehör']
+    };
+    s.products.forEach(p=>{const k=normalizeText(p.name),f=fixes6[k];if(f&&(!p.category||p.category==='Sonstiges'||!p.subcategory||k==='augenmaske')){p.category=f[0];p.subcategory=f[1]}});
+    s.categoryLearning={};
+    s.products.forEach(p=>{if(!p.category||!p.subcategory)return;normalizeText(p.name).split(/\s+/).filter(t=>t.length>=3&&!/^\d+$/.test(t)&&!['mit','und','der','die','das','klein','kleine','gross'].includes(t)).forEach(t=>{const old=s.categoryLearning[t];if(old&&old.category===p.category&&old.subcategory===p.subcategory)old.count=(old.count||1)+1;else s.categoryLearning[t]={category:p.category,subcategory:p.subcategory,count:1}})});
+    s.categorySchemaVersion=6;
+  }
+
 }
 function saveState(){state.batches.forEach(b=>{b.items=(b.items||[]).slice().sort((a,c)=>parseIdNumber(a.pid,'PID')-parseIdNumber(c.pid,'PID')||String(a.pid).localeCompare(String(c.pid),'de',{numeric:true}))});localStorage.setItem(STORAGE_KEY,JSON.stringify(state));renderAll()}
 function statusLabel(s){return ({idea:'Idee',research:'Recherche',prototype:'Prototyp',ready:'Verkaufsbereit'})[s]||'Idee'}
