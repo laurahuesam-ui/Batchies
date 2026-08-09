@@ -38,11 +38,17 @@ function renderColorPicker(selected=[]){
   const chosen=new Set(normalizeProductColors(selected));
   const el=$('#productColorPicker');
   if(!el)return;
-  el.innerHTML=PRODUCT_COLORS.map(c=>`<label class="color-choice ${chosen.has(c.name)?'selected':''}" title="${esc(c.name)}"><input type="checkbox" value="${esc(c.name)}" ${chosen.has(c.name)?'checked':''}><span class="color-choice-dot" style="--dot:${c.hex}"></span><span>${esc(c.name)}</span></label>`).join('');
-  el.querySelectorAll('input').forEach(input=>input.addEventListener('change',()=>input.closest('.color-choice').classList.toggle('selected',input.checked)));
+  el.innerHTML=PRODUCT_COLORS.map(c=>`<button type="button" class="color-choice ${chosen.has(c.name)?'selected':''}" data-color="${esc(c.name)}" aria-pressed="${chosen.has(c.name)?'true':'false'}" title="${esc(c.name)}"><span class="color-choice-dot" style="--dot:${c.hex}"></span><span>${esc(c.name)}</span></button>`).join('');
+  el.querySelectorAll('.color-choice').forEach(btn=>btn.addEventListener('click',e=>{
+    e.preventDefault();
+    e.stopPropagation();
+    const active=!btn.classList.contains('selected');
+    btn.classList.toggle('selected',active);
+    btn.setAttribute('aria-pressed',active?'true':'false');
+  }));
 }
 function collectSelectedColors(){
-  return $$('#productColorPicker input[type="checkbox"]:checked').map(x=>x.value);
+  return $$('#productColorPicker .color-choice.selected').map(x=>x.dataset.color).filter(Boolean);
 }
 function setSelectedColors(colors=[]){renderColorPicker(colors)}
 function initColorFilter(){
