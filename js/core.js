@@ -85,6 +85,25 @@ function migrateState(s){s.products=Array.isArray(s.products)?s.products:[];s.ba
     s.products.forEach(p=>{if(!p.category||!p.subcategory)return;normalizeText(p.name).split(/\s+/).filter(t=>t.length>=3&&!/^\d+$/.test(t)&&!['mit','und','der','die','das','klein'].includes(t)).forEach(t=>{const old=s.categoryLearning[t];if(old&&old.category===p.category&&old.subcategory===p.subcategory)old.count=(old.count||1)+1;else s.categoryLearning[t]={category:p.category,subcategory:p.subcategory,count:1}})});
     s.categorySchemaVersion=4;
   }
+
+  if(num(s.categorySchemaVersion)<5){
+    const fixes5={
+      'filsstift':['Büro & Schule','Stifte'],
+      'filzstift':['Büro & Schule','Stifte'],
+      'bleistift':['Büro & Schule','Stifte'],
+      'korrekturroller':['Büro & Schule','Korrekturmittel'],
+      'highlighter':['Büro & Schule','Stifte'],
+      'wochenplaner':['Büro & Schule','Planer'],
+      'washi tape':['Basteln & DIY','Washi Tape & Deko-Klebebänder'],
+      'book tracker':['Büro & Schule','Lese- & Buchtracker'],
+      'buroklammer':['Büro & Schule','Schreibtischzubehör']
+    };
+    s.products.forEach(p=>{const k=normalizeText(p.name),f=fixes5[k];if(f&&(!p.category||p.category==='Sonstiges'||!p.subcategory)){p.category=f[0];p.subcategory=f[1]}});
+    s.categoryLearning={};
+    s.products.forEach(p=>{if(!p.category||!p.subcategory)return;normalizeText(p.name).split(/\s+/).filter(t=>t.length>=3&&!/^\d+$/.test(t)&&!['mit','und','der','die','das','klein'].includes(t)).forEach(t=>{const old=s.categoryLearning[t];if(old&&old.category===p.category&&old.subcategory===p.subcategory)old.count=(old.count||1)+1;else s.categoryLearning[t]={category:p.category,subcategory:p.subcategory,count:1}})});
+    s.categorySchemaVersion=5;
+  }
+
 }
 function saveState(){state.batches.forEach(b=>{b.items=(b.items||[]).slice().sort((a,c)=>parseIdNumber(a.pid,'PID')-parseIdNumber(c.pid,'PID')||String(a.pid).localeCompare(String(c.pid),'de',{numeric:true}))});localStorage.setItem(STORAGE_KEY,JSON.stringify(state));renderAll()}
 function statusLabel(s){return ({idea:'Idee',research:'Recherche',prototype:'Prototyp',ready:'Verkaufsbereit'})[s]||'Idee'}
