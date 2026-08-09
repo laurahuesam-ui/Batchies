@@ -1,7 +1,7 @@
 let currentBatchSuggestions=[];
 
 /*
-  Batch-Assistent v2.1.3
+  Batch-Assistent v2.2
   Kernidee: Produkte werden nicht nur nach Kategorie, sondern nach ihrer Funktion bewertet.
   Multifunktionsprodukte können mehrere Rollen gleichzeitig abdecken. Dadurch sind z. B.
   "Kamm mit Spiegel" und danach zusätzlich "Kamm" + "Spiegel" redundant.
