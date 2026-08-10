@@ -15,7 +15,7 @@ function calcProduct(p,overridePrice=null){const price=overridePrice===null?num(
 function batchCalc(b,overridePrice=null){
   let productCost=0;
   (b.items||[]).forEach(i=>{const p=state.products.find(x=>x.pid===i.pid);if(p)productCost+=productPurchaseCost(p)*Math.max(1,num(i.qty,1))});
-  const extra=num(b.extraCost),costs=productCost+extra,price=overridePrice===null?num(b.salePrice):num(overridePrice),revenue=price;
+  const extra=Array.isArray(b.costs)?b.costs.reduce((a,c)=>a+num(c.amount),0):num(b.extraCost),costs=productCost+extra,price=overridePrice===null?num(b.salePrice):num(overridePrice),revenue=price;
   const rate=variableFeeRate(b),baseFee=fixedFees(b),rawPlatform=baseFee+revenue*rate,feeVat=rawPlatform*(state.settings.feeVatPct/100),fees=rawPlatform+feeVat;
   const profit=revenue-costs-fees,margin=revenue>0?profit/revenue*100:0,target=num(b.targetMargin,30)/100,vatMult=1+state.settings.feeVatPct/100,eVar=rate*vatMult,eFixed=baseFee*vatMult,denom=1-target-eVar;
   let recommended=0;if(denom>0){recommended=(costs+eFixed)/denom;recommended=Math.ceil((recommended-1e-9)*10)/10}
