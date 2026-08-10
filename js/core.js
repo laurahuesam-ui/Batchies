@@ -150,7 +150,7 @@ function migrateState(s){s.products=Array.isArray(s.products)?s.products:[];s.ba
   }
 
 
-  return migrateAlibabaCustomsOnce(state);
+  return migrateAlibabaCustomsOnce(s);
 }
 function saveState(){state.batches.forEach(b=>{b.items=(b.items||[]).slice().sort((a,c)=>parseIdNumber(a.pid,'PID')-parseIdNumber(c.pid,'PID')||String(a.pid).localeCompare(String(c.pid),'de',{numeric:true}))});localStorage.setItem(STORAGE_KEY,JSON.stringify(state));renderAll()}
 function statusLabel(s){return ({idea:'Idee',research:'Recherche',prototype:'Prototyp',ready:'Verkaufsbereit'})[s]||'Idee'}
