@@ -4,7 +4,7 @@ function supplierQtyBase(s){if(!s)return 1;return s.priceType==='set'?Math.max(1
 function supplierUnitPrice(s){if(!s)return 0;if(s.priceType==='set')return num(s.setPrice)/Math.max(1,num(s.setQty,1));return num(s.price)}
 function supplierUnitShipping(s){return s?num(s.totalShipping)/supplierQtyBase(s):0}
 function supplierBaseOrderCost(s){if(!s)return 0;return s.priceType==='set'?num(s.setPrice)+num(s.totalShipping):supplierUnitPrice(s)*Math.max(1,num(s.minOrderQty,1))+num(s.totalShipping)}
-function supplierHasCustoms(s){return !!s&&(isAlibabaSupplierName(s.name)||!!s.customs)}
+function supplierHasCustoms(s){return !!s&&!!s.customs}
 function supplierCustomsCost(s){return supplierHasCustoms(s)?supplierBaseOrderCost(s)*0.12:0}
 function supplierOrderCost(s){return supplierBaseOrderCost(s)+supplierCustomsCost(s)}
 function supplierLandedUnitCost(s){return s?supplierOrderCost(s)/supplierQtyBase(s):0}
