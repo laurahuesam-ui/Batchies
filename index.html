@@ -27,10 +27,10 @@
 <body>
 <div class="app">
 <header class="topbar">
-  <div class="brand"><div class="logo">B</div><div><h1>Batchies</h1><div class="subtitle">Produktentwicklung & Stammdaten · v2.4.9</div></div></div>
+  <div class="brand"><div class="logo">B</div><div><h1>Batchies</h1><div class="subtitle">Produktentwicklung & Stammdaten · v2.5.0</div></div></div>
   <div class="actions"><button class="btn" id="exportBackupBtn">Backup</button><button class="btn" id="importBackupBtn">Import</button><button class="btn primary" id="addProductBtn">+ Produkt</button><button class="btn primary" id="addBatchBtn">+ Batch</button><input type="file" id="backupFile" accept="application/json" hidden></div>
 </header>
-<nav class="tabs"><button class="tab active" data-tab="overview">Übersicht</button><button class="tab" data-tab="products">Produkte</button><button class="tab" data-tab="batches">Batches</button><button class="tab" data-tab="fees">Gebühren & Kalkulation</button><button class="tab" data-tab="investments">Investitionen</button><button class="tab" data-tab="simulation">Einkaufs-Simulation</button><button class="tab" data-tab="data">Stammdaten & CSV</button></nav>
+<nav class="tabs"><button class="tab active" data-tab="overview">Übersicht</button><button class="tab" data-tab="products">Produkte</button><button class="tab" data-tab="packaging">Verpackung</button><button class="tab" data-tab="batches">Batches</button><button class="tab" data-tab="fees">Gebühren & Kalkulation</button><button class="tab" data-tab="investments">Investitionen</button><button class="tab" data-tab="simulation">Einkaufs-Simulation</button><button class="tab" data-tab="data">Stammdaten & CSV</button></nav>
 <main>
 <section id="tab-overview" class="tabpage"><div class="grid">
   <div class="card span3"><div class="kpi-label">Produkte</div><div class="kpi-value" id="kpiProducts">0</div><div class="kpi-sub" id="kpiReady">0 verkaufsbereit</div></div>
@@ -41,6 +41,13 @@
   <div class="card span4"><h2 class="section-title">Etsy-Kostenmodell</h2><div class="calcrow"><span>Variable Standardgebühren</span><strong id="feeRateSummary">10,50 %</strong></div><div class="calcrow"><span>Fix pro Verkauf</span><strong id="feeFixedSummary">0,48 €</strong></div><div class="calcrow"><span>Offsite Ads optional</span><strong id="feeAdsSummary">15,00 %</strong></div><div class="calcrow"><span>Währungsumrechnung optional</span><strong id="feeFxSummary">2,50 %</strong></div></div>
 </div></section>
 <section id="tab-products" class="tabpage hidden"><div class="card"><div class="toolbar"><div><h2 class="section-title" style="margin-bottom:2px">Produkt-Stammdaten</h2><div class="muted">PID, Lieferanten vergleichen, Produktbild und Kalkulation.</div></div><div class="inline"><select id="filterProductColor" class="color-filter" title="Nach Farbe filtern"></select><input class="search" id="searchProducts" placeholder="Produkte suchen …"></div></div><div id="productsTable"></div></div></section>
+
+<section id="tab-packaging" class="tabpage hidden"><div class="grid">
+  <div class="card span12">
+    <div class="toolbar"><div><h2 class="section-title" style="margin-bottom:2px">Verpackungsmaterialien</h2><div class="muted">Eigene Stammdaten mit VID und Lieferantenvergleich.</div></div><div class="inline"><input id="searchPackaging" class="search" placeholder="Verpackung suchen …"><button class="btn primary" id="addPackagingBtn" type="button">+ Verpackungsmaterial</button></div></div>
+    <div class="table-wrap"><table><thead><tr><th>VID</th><th>Bild</th><th>Material</th><th>Status</th><th>Lieferanten & URLs</th><th>Preis/Stück</th><th>Bestellwert</th><th></th></tr></thead><tbody id="packagingBody"></tbody></table></div>
+  </div>
+</div></section>
 <section id="tab-batches" class="tabpage hidden"><div class="grid"><div class="card span12"><div class="toolbar"><div><h2 class="section-title" style="margin-bottom:2px">Batch-Vorschläge</h2><div class="muted">Batchies kombiniert Produkte nach Funktion, Kategorie und deinen bestehenden Batches. Redundante Produkte und nahezu gleiche Sets werden vermieden.</div></div><div class="inline"><button class="btn secondary" id="refreshBatchSuggestionsBtn">Vorschläge neu berechnen</button><button class="btn secondary" id="toggleBatchSuggestionsBtn" type="button">Minimieren</button></div></div><div id="batchSuggestionsPanel"><div id="batchSuggestions"></div></div></div><div class="card span12"><div class="toolbar"><div><h2 class="section-title" style="margin-bottom:2px">Batch-Stammdaten</h2><div class="muted">Batches bündeln mehrere Produkte und erhalten eine eigene BID.</div></div><input class="search" id="searchBatches" placeholder="Batches suchen …"></div><div id="batchesTable"></div></div></div></section>
 <section id="tab-fees" class="tabpage hidden"><div class="grid">
   <div class="card span8"><h2 class="section-title">Etsy-Gebühren</h2><div class="fee-list">
@@ -66,7 +73,7 @@
 </div></section>
 <section id="tab-data" class="tabpage hidden"><div class="grid">
   <div class="card span6"><h2 class="section-title">Produkte als CSV</h2><p class="muted">Exportiert die Produkt-Stammdaten inklusive PID, Kalkulationspreis, Lieferanten, URLs, Preisen und Status.</p><button class="btn primary" id="productsCsvBtn">Produkte CSV exportieren</button></div>
-  <div class="card span6"><h2 class="section-title">Batches als CSV</h2><p class="muted">Exportiert die Batch-Stammdaten inklusive BID, enthaltenen PIDs, Mengen und kalkulierten Batchkosten.</p><button class="btn primary" id="batchesCsvBtn">Batches CSV exportieren</button></div>
+  <div class="card span6"><h2 class="section-title">Batches als CSV</h2><p class="muted">Exportiert die Batch-Stammdaten inklusive BID, enthaltenen PIDs, Mengen und kalkulierten Batchkosten.</p><button class="btn primary" id="batchesCsvBtn">Batches CSV exportieren</button></div><div class="card span6"><h2 class="section-title">Verpackung als CSV</h2><p class="muted">Exportiert die Verpackungs-Stammdaten inklusive VID, Lieferanten, URLs, Set-/Stückpreisen und Bestellwerten.</p><button class="btn primary" id="packagingCsvBtn">Verpackung CSV exportieren</button></div>
   <div class="card span12"><h2 class="section-title">Datensicherung</h2><p class="muted">Das JSON-Backup enthält zusätzlich Bilder und alle Einstellungen. CSV ist für Tabellen/Weiterverarbeitung gedacht; das JSON-Backup für vollständige Wiederherstellung.</p><div class="inline"><button class="btn" id="dataBackupBtn">Vollständiges Backup exportieren</button><button class="btn" id="dataImportBtn">Backup importieren</button></div></div>
 </div></section>
 </main></div>
@@ -106,6 +113,19 @@
 <div id="batchAssistant" class="batch-assistant hidden"><div class="assistant-head"><div><h3 class="section-title" style="margin-bottom:2px">Batch-Assistent</h3><div class="muted">Analysiert diesen Batch nur anhand deiner vorhandenen Produkt-Stammdaten und bestehenden Batches.</div></div><span class="assistant-score" id="batchAssistantScore">0 %</span></div><div id="batchAssistantContent"></div></div><div class="field" style="margin-top:14px"><label>Notizen</label><textarea id="batchNotes" placeholder="Verpackung, Thema, Varianten, offene Punkte …"></textarea></div>
 <div class="modal-foot"><button type="button" class="btn danger hidden" id="deleteBatchBtn">Batch löschen</button><span style="flex:1"></span><button type="button" class="btn cancel-batch-dialog">Abbrechen</button><button type="submit" class="btn primary" value="save">Speichern</button></div>
 </form></dialog>
+
+<dialog id="packagingDialog"><form method="dialog" class="modal" id="packagingForm">
+  <div class="modal-head"><div><h2 id="packagingModalTitle">Verpackungsmaterial</h2><div class="statusline"><span class="idchip" id="packagingVidLabel">VID wird beim Speichern vergeben</span><span class="muted">Verpackungs-Stammdatum</span></div></div><button type="button" class="iconbtn close-packaging-dialog" aria-label="Schließen">✕</button></div>
+  <input type="hidden" id="packagingKey"><input type="hidden" id="packagingVid">
+  <div class="row"><div class="field col8"><label>Verpackungsmaterial</label><input id="packagingName" required placeholder="z. B. Geschenkbox, Seidenpapier, Füllmaterial"></div><div class="field col4"><label>Status</label><select id="packagingStatus"><option value="idea">Idee</option><option value="research">Recherche</option><option value="prototype">Prototyp</option><option value="ready">Verkaufsbereit</option></select></div></div>
+  <h3 class="section-title">Lieferanten & Fundstellen</h3>
+  <div class="info" style="margin-bottom:10px">Gleiche Lieferantenlogik wie bei Produkten: Stückpreis + Mindestbestellmenge oder Setpreis + Stück im Set → Versand → Preis/Stück → Bestellwert → Bild-URL → Zoll → ⭐.</div>
+  <div id="packagingSupplierRows"></div>
+  <button type="button" class="btn" id="addPackagingSupplierBtn">+ Lieferant / URL</button>
+  <div class="field" style="margin-top:14px"><label>Notizen</label><textarea id="packagingNotes" placeholder="Größe, Farbe, Material, Einsatz, offene Fragen …"></textarea></div>
+  <div class="modal-foot"><button type="button" class="btn danger hidden" id="deletePackagingBtn">Verpackungsmaterial löschen</button><span style="flex:1"></span><button type="button" class="btn cancel-packaging-dialog">Abbrechen</button><button type="submit" class="btn primary" value="save">Speichern</button></div>
+</form></dialog>
+
 <script src="js/category-data.js"></script>
 <script src="js/config.js"></script>
 <script src="js/colors.js"></script>
@@ -117,5 +137,6 @@
 <script src="js/batch-suggestions.js"></script>
 <script src="js/exports.js"></script>
 <script src="js/simulation.js"></script>
+<script src="js/packaging.js"></script>
 <script src="js/app.js"></script>
 </body></html>
