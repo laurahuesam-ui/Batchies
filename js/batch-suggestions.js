@@ -99,7 +99,7 @@ function suggestionFrom(theme,variant){
   if(picked.length<2)return null;
   const items=picked.map(x=>({pid:x.p.pid,qty:1})),closest=closestExisting(items);if(closest?.sim>=.92)return null;
   const subs=new Set(picked.map(x=>x.p.subcategory).filter(Boolean)),avg=picked.reduce((a,x)=>a+x.score,0)/picked.length;
-  const draft={items,costs:[{name:'Verpackung / Sonstiges',amount:0}],extraCost:0,targetMargin:30,salePrice:0,useOffsite:false,useCurrency:false,useSetup:false};
+  const draft={items,packagingItems:[],targetMargin:30,salePrice:0,useOffsite:false,useCurrency:false,useSetup:false};
   return{name:theme.name+(variant==='basic'?' – Basic':' – Complete'),themeName:theme.name,variant,items,score:Math.round(Math.min(98,58+avg*2+subs.size*2-(closest?.sim||0)*15)),reason:variant==='basic'?'Kleinste sinnvolle Kombination, die die Kernfunktionen dieses Sets abdeckt.':theme.reason,subcategoryCount:subs.size,calc:batchCalc(draft),closest:closest?.sim>=.35?closest:null};
 }
 function buildBatchSuggestions(){let candidates=[];for(const theme of BATCH_THEMES){const basic=suggestionFrom(theme,'basic'),complete=suggestionFrom(theme,'complete');if(basic)candidates.push(basic);if(complete&&(!basic||jaccard(basic.items,complete.items)<.82))candidates.push(complete)}candidates.sort((a,b)=>b.score-a.score);const kept=[];for(const s of candidates){const duplicate=kept.some(k=>k.themeName!==s.themeName&&jaccard(k.items,s.items)>=.66);if(!duplicate)kept.push(s);if(kept.length>=10)break}return kept}

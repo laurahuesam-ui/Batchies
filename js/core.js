@@ -51,7 +51,7 @@ s.packaging.forEach((v,i)=>{
   });
   if(v.suppliers.length&&!v.suppliers.some(x=>x.preferred))v.suppliers[0].preferred=true;
   v.notes=String(v.notes||'');
-});s.batches.forEach(b=>{if(!b.key)b.key=b.id||crypto.randomUUID();let n=parseIdNumber(b.bid,'BID');if(!n){n=++maxB;b.bid=displayId('BID',n)}else maxB=Math.max(maxB,n);b.items=(Array.isArray(b.items)?b.items:[]).slice().sort((a,c)=>parseIdNumber(a.pid,'PID')-parseIdNumber(c.pid,'PID')||String(a.pid).localeCompare(String(c.pid),'de',{numeric:true}));if(!Array.isArray(b.costs))b.costs=[{name:'Verpackung / Sonstiges',amount:num(b.extraCost)}];else b.costs=b.costs.map(c=>({name:String(c?.name||'Kosten'),amount:num(c?.amount)}));b.extraCost=b.costs.reduce((a,c)=>a+num(c.amount),0);if(b.targetMargin===undefined)b.targetMargin=30;b.useOffsite=!!b.useOffsite;b.useCurrency=!!b.useCurrency;b.useSetup=!!b.useSetup});s.counters={product:maxP,packaging:maxV,batch:maxB};
+});s.batches.forEach(b=>{if(!b.key)b.key=b.id||crypto.randomUUID();let n=parseIdNumber(b.bid,'BID');if(!n){n=++maxB;b.bid=displayId('BID',n)}else maxB=Math.max(maxB,n);b.items=(Array.isArray(b.items)?b.items:[]).slice().sort((a,c)=>parseIdNumber(a.pid,'PID')-parseIdNumber(c.pid,'PID')||String(a.pid).localeCompare(String(c.pid),'de',{numeric:true}));b.packagingItems=(Array.isArray(b.packagingItems)?b.packagingItems:[]).slice().sort((a,c)=>parseIdNumber(a.vid,'VID')-parseIdNumber(c.vid,'VID')||String(a.vid).localeCompare(String(c.vid),'de',{numeric:true}));if(!Array.isArray(b.costs))b.costs=[];b.extraCost=num(b.extraCost);if(b.targetMargin===undefined)b.targetMargin=30;b.useOffsite=!!b.useOffsite;b.useCurrency=!!b.useCurrency;b.useSetup=!!b.useSetup});s.counters={product:maxP,packaging:maxV,batch:maxB};
   if(num(s.categorySchemaVersion)<2){
     const fixes={
       'kosmetiktasche':['Beauty','Kosmetiktaschen & Etuis'],
@@ -182,7 +182,7 @@ s.packaging.forEach((v,i)=>{
 
   return migrateAlibabaCustomsOnce(s);
 }
-function saveState(){state.packaging=(state.packaging||[]).slice().sort((a,b)=>parseIdNumber(a.vid,'VID')-parseIdNumber(b.vid,'VID')||String(a.vid).localeCompare(String(b.vid),'de',{numeric:true}));state.batches.forEach(b=>{b.items=(b.items||[]).slice().sort((a,c)=>parseIdNumber(a.pid,'PID')-parseIdNumber(c.pid,'PID')||String(a.pid).localeCompare(String(c.pid),'de',{numeric:true}))});localStorage.setItem(STORAGE_KEY,JSON.stringify(state));renderAll()}
+function saveState(){state.packaging=(state.packaging||[]).slice().sort((a,b)=>parseIdNumber(a.vid,'VID')-parseIdNumber(b.vid,'VID')||String(a.vid).localeCompare(String(b.vid),'de',{numeric:true}));state.batches.forEach(b=>{b.items=(b.items||[]).slice().sort((a,c)=>parseIdNumber(a.pid,'PID')-parseIdNumber(c.pid,'PID')||String(a.pid).localeCompare(String(c.pid),'de',{numeric:true}));b.packagingItems=(b.packagingItems||[]).slice().sort((a,c)=>parseIdNumber(a.vid,'VID')-parseIdNumber(c.vid,'VID')||String(a.vid).localeCompare(String(c.vid),'de',{numeric:true}))});localStorage.setItem(STORAGE_KEY,JSON.stringify(state));renderAll()}
 function statusLabel(s){return ({idea:'Idee',research:'Recherche',prototype:'Prototyp',ready:'Verkaufsbereit'})[s]||'Idee'}
 
 let state=loadState();
