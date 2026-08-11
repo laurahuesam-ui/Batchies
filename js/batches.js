@@ -18,8 +18,57 @@ function batchProductionPlan(b){
 function productionLinesHtml(lines,label){if(!lines.length)return'';return`<div class="tiny" style="font-weight:800;margin:12px 0 5px">${esc(label)}</div><div class="production-lines"><div class="production-line head"><span>ID · Position</span><span>Bedarf/Batch</span><span>1. Bestellung</span><span>Reicht für</span></div>${lines.map(x=>`<div class="production-line"><span><b>${esc(x.id)}</b> · ${esc(x.name)}</span><span>${x.qty} Stk.</span><span>${x.missing?'–':x.available+' Stk. · '+euro(x.orderCost)}</span><span>${x.missing?'–':x.batches+' Batches'}</span></div>`).join('')}</div>`}
 function renderBatchProductionPlan(b){const el=$('#batchProductionContent');if(!el)return;const p=batchProductionPlan(b);if(!p.lines.length){el.innerHTML='<div class="assistant-empty" style="margin-top:10px">Füge Produkte oder Verpackungsmaterialien hinzu, um die Herstellungsplanung zu berechnen.</div>';return}const limiter=p.limiter.length?p.limiter.map(x=>esc(x.id+' · '+x.name)).join(', '):(p.missing?'Lieferantendaten fehlen':'–');el.innerHTML=`<div class="production-kpis"><div class="production-kpi"><div class="label">Erste Warenbestellung</div><div class="value">${euro(p.firstOrderCost)}</div></div><div class="production-kpi"><div class="label">Mögliche vollständige Batches</div><div class="value">${p.possible}</div></div><div class="production-kpi"><div class="label">Engpass</div><div class="value" style="font-size:12px">${limiter}</div></div><div class="production-kpi"><div class="label">Material-EK pro Batch</div><div class="value">${euro(p.unitBatchCost)}</div></div></div><div class="tiny" style="margin-top:7px">Die 1. Warenbestellung berücksichtigt PIDs und VIDs jeweils mit MOQ bzw. Set, Versand und aktiviertem Zoll.${p.missing?' Für mindestens eine Position fehlen Lieferantendaten.':''}</div>${productionLinesHtml(p.productLines,'Produkte (PID)')}${productionLinesHtml(p.packagingLines,'Verpackung (VID)')}`}
 
-function renderBatches(){state.batches.forEach(b=>{b.items=sortBatchItemsByPid(b.items);b.packagingItems=sortBatchPackagingByVid(b.packagingItems)});const q=($('#searchBatches')?.value||'').toLowerCase().trim(),bs=state.batches.filter(b=>(b.bid+' '+b.name+' '+(b.notes||'')).toLowerCase().includes(q)),el=$('#batchesTable');if(!bs.length){el.innerHTML='<div class="empty"><strong>'+(state.batches.length?'Keine Treffer':'Noch keine Batches')+'</strong>Ein Batch kann Produkt-PIDs und Verpackungs-VIDs enthalten.</div>';return}el.innerHTML='<div class="table-wrap"><table class="batch-table"><thead><tr><th class="batch-id-col">ID</th><th class="batch-name-col">Batch</th><th class="batch-status-col">Status</th><th class="batch-products-col">Produkte</th><th>Verpackung</th><th class="batch-first-order-col">1. Warenbestellung</th><th class="batch-ek-col">EK gesamt</th><th class="batch-rec-col">Empf. VK</th><th class="batch-vk-col">VK</th><th class="batch-margin-col">Marge</th><th class="batch-action-col"></th></tr></thead><tbody>'+bs.map(b=>{const c=batchCalc(b),prod=batchProductionPlan(b);return`<tr><td class="batch-id-col"><span class="idchip">${esc(b.bid)}</span></td><td class="batch-name-col"><div class="name">${esc(b.name)}</div></td><td class="batch-status-col"><span class="badge ${b.status}">${statusLabel(b.status)}</span></td><td class="batch-products-col"><div class="batch-products-list">${(b.items||[]).map(i=>esc(i.pid)+' × '+num(i.qty,1)).join(', ')||'–'}</div></td><td><div class="batch-products-list">${(b.packagingItems||[]).map(i=>esc(i.vid)+' × '+num(i.qty,1)).join(', ')||'–'}</div></td><td class="money batch-first-order-col">${euro(prod.firstOrderCost)}</td><td class="money batch-ek-col">${euro(c.total)}</td><td class="money positive batch-rec-col">${euro(c.recommended)}</td><td class="money batch-vk-col">${euro(b.salePrice)}</td><td class="batch-margin-col ${c.margin>=num(b.targetMargin,30)?'positive':'negative'}">${pct(c.margin)}</td><td class="batch-action-col"><button class="iconbtn" onclick="openBatch('${b.key}')">✎</button></td></tr>`}).join('')+'</tbody></table></div>'}
+function renderBatches(){
+  state.batches.forEach(b=>{
+    b.items=sortBatchItemsByPid(b.items);
+    b.packagingItems=sortBatchPackagingByVid(b.packagingItems)
+  });
+  const q=($('#searchBatches')?.value||'').toLowerCase().trim(),
+    bs=state.batches.filter(b=>(b.bid+' '+b.name+' '+(b.notes||'')).toLowerCase().includes(q)),
+    el=$('#batchesTable');
+  if(!bs.length){
+    el.innerHTML='<div class="empty"><strong>'+(state.batches.length?'Keine Treffer':'Noch keine Batches')+'</strong>Ein Batch kann Produkt-PIDs und Verpackungs-VIDs enthalten.</div>';
+    return
+  }
+  el.innerHTML='<div class="table-wrap"><table class="batch-table"><thead><tr>'+
+    '<th class="batch-id-col">ID</th>'+
+    '<th class="batch-name-col">Batch</th>'+
+    '<th class="batch-status-col">Status</th>'+
+    '<th class="batch-products-col">Produkte</th>'+
+    '<th class="batch-vid-col">VID</th>'+
+    '<th class="batch-first-order-col" title="1. Warenbestellung / Anfangskauf">1. AK</th>'+
+    '<th class="batch-ek-col">EK</th>'+
+    '<th class="batch-rec-col">Empf. VK</th>'+
+    '<th class="batch-vk-col">VK</th>'+
+    '<th class="batch-margin-col">Marge</th>'+
+    '<th class="batch-action-col"></th>'+
+    '</tr></thead><tbody>'+
+    bs.map(b=>{
+      const c=batchCalc(b),prod=batchProductionPlan(b);
+      return `<tr>
+        <td class="batch-id-col"><span class="idchip">${esc(b.bid)}</span></td>
+        <td class="batch-name-col"><div class="name">${esc(b.name)}</div></td>
+        <td class="batch-status-col"><span class="badge ${b.status}">${statusLabel(b.status)}</span></td>
+        <td class="batch-products-col"><div class="batch-products-list">${(b.items||[]).map(i=>esc(i.pid)+' × '+num(i.qty,1)).join(', ')||'–'}</div></td>
+        <td class="batch-vid-col"><div class="batch-vid-list">${(b.packagingItems||[]).map(i=>esc(i.vid)+' × '+num(i.qty,1)).join(', ')||'–'}</div></td>
+        <td class="money batch-first-order-col">${euro(prod.firstOrderCost)}</td>
+        <td class="money batch-ek-col">${euro(c.total)}</td>
+        <td class="money positive batch-rec-col">${euro(c.recommended)}</td>
+        <td class="money batch-vk-col">${euro(b.salePrice)}</td>
+        <td class="batch-margin-col ${c.margin>=num(b.targetMargin,30)?'positive':'negative'}">${pct(c.margin)}</td>
+        <td class="batch-action-col"><button type="button" class="iconbtn batch-edit-btn" data-key="${esc(b.key)}" title="Batch bearbeiten">✎</button></td>
+      </tr>`
+    }).join('')+
+    '</tbody></table></div>';
 
+  $$('.batch-edit-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const key=btn.dataset.key;
+      if(!key)return;
+      openBatch(key)
+    })
+  })
+}
 function renderBatchItemRows(items){items=sortBatchItemsByPid(items);const opts='<option value="">Produkt wählen …</option>'+state.products.map(p=>`<option value="${esc(p.pid)}">${esc(p.pid)} · ${esc(p.name)}</option>`).join('');$('#batchItemRows').innerHTML=(items.length?items:[{pid:'',qty:1}]).map(i=>`<div class="batch-item-row"><select class="batch-product">${opts}</select><input class="batch-qty" type="number" min="1" step="1" value="${Math.max(1,num(i.qty,1))}"><div class="money batch-line-cost">0,00 €</div><button type="button" class="iconbtn remove-batch-item">✕</button></div>`).join('');$$('.batch-item-row').forEach((r,idx)=>{r.querySelector('.batch-product').value=items[idx]?.pid||''});bindBatchItemEvents()}
 function bindBatchItemEvents(){$$('.batch-product,.batch-qty').forEach(e=>e.addEventListener('input',liveBatchCalc));$$('.remove-batch-item').forEach(b=>b.addEventListener('click',()=>{b.closest('.batch-item-row').remove();liveBatchCalc()}))}
 function renderBatchPackagingRows(items){items=sortBatchPackagingByVid(items);const opts='<option value="">Verpackung wählen …</option>'+state.packaging.map(v=>`<option value="${esc(v.vid)}">${esc(v.vid)} · ${esc(v.name)}</option>`).join('');$('#batchPackagingRows').innerHTML=(items.length?items:[{vid:'',qty:1}]).map(i=>`<div class="batch-item-row batch-packaging-row"><select class="batch-packaging">${opts}</select><input class="batch-packaging-qty" type="number" min="1" step="1" value="${Math.max(1,num(i.qty,1))}"><div class="money batch-packaging-line-cost">0,00 €</div><button type="button" class="iconbtn remove-batch-packaging">✕</button></div>`).join('');$$('.batch-packaging-row').forEach((r,idx)=>{r.querySelector('.batch-packaging').value=items[idx]?.vid||''});bindBatchPackagingEvents()}
