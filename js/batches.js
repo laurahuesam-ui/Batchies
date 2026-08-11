@@ -62,18 +62,120 @@ function renderBatches(){
     '</tbody></table></div>';
 
 }
-function renderBatchItemRows(items){items=sortBatchItemsByPid(items);const opts='<option value="">Produkt wählen …</option>'+state.products.map(p=>`<option value="${esc(p.pid)}">${esc(p.pid)} · ${esc(p.name)}</option>`).join('');$('#batchItemRows').innerHTML=(items.length?items:[{pid:'',qty:1}]).map(i=>`<div class="batch-item-row"><select class="batch-product">${opts}</select><input class="batch-qty" type="number" min="1" step="1" value="${Math.max(1,num(i.qty,1))}"><div class="money batch-line-cost">0,00 €</div><button type="button" class="iconbtn remove-batch-item">✕</button></div>`).join('');$$('#batchItemRows .batch-item-row').forEach((r,idx)=>{r.querySelector('.batch-product').value=items[idx]?.pid||''});bindBatchItemEvents()}
-function bindBatchItemEvents(){$$('#batchItemRows .batch-product,#batchItemRows .batch-qty').forEach(e=>e.addEventListener('input',liveBatchCalc));$$('#batchItemRows .remove-batch-item').forEach(b=>b.addEventListener('click',()=>{b.closest('.batch-item-row').remove();liveBatchCalc()}))}
-function renderBatchPackagingRows(items){items=sortBatchPackagingByVid(items);const opts='<option value="">Verpackung wählen …</option>'+state.packaging.map(v=>`<option value="${esc(v.vid)}">${esc(v.vid)} · ${esc(v.name)}</option>`).join('');$('#batchPackagingRows').innerHTML=(items.length?items:[{vid:'',qty:1}]).map(i=>`<div class="batch-item-row batch-packaging-row"><select class="batch-packaging">${opts}</select><input class="batch-packaging-qty" type="number" min="1" step="1" value="${Math.max(1,num(i.qty,1))}"><div class="money batch-packaging-line-cost">0,00 €</div><button type="button" class="iconbtn remove-batch-packaging">✕</button></div>`).join('');$$('#batchPackagingRows .batch-packaging-row').forEach((r,idx)=>{r.querySelector('.batch-packaging').value=items[idx]?.vid||''});bindBatchPackagingEvents()}
-function bindBatchPackagingEvents(){$$('#batchPackagingRows .batch-packaging,#batchPackagingRows .batch-packaging-qty').forEach(e=>e.addEventListener('input',liveBatchCalc));$$('#batchPackagingRows .remove-batch-packaging').forEach(b=>b.addEventListener('click',()=>{b.closest('.batch-packaging-row').remove();liveBatchCalc()}))}
+function renderBatchItemRows(items){
+  const clean=sortBatchItemsByPid(Array.isArray(items)?items:[]);
+  const opts='<option value="">Produkt wählen …</option>'+state.products.map(p=>`<option value="${esc(p.pid)}">${esc(p.pid)} · ${esc(p.name)}</option>`).join('');
+  const shown=clean.length?clean:[{pid:'',qty:1}];
+  $('#batchItemRows').innerHTML=shown.map(i=>`<div class="batch-product-row"><select class="batch-product">${opts}</select><input class="batch-qty" type="number" min="1" step="1" value="${Math.max(1,num(i?.qty,1))}"><div class="money batch-line-cost">0,00 €</div><button type="button" class="iconbtn remove-batch-item">✕</button></div>`).join('');
+  $$('#batchItemRows .batch-product-row').forEach((r,idx)=>{
+    const select=r.querySelector('.batch-product');
+    if(select)select.value=shown[idx]?.pid||'';
+  });
+  bindBatchItemEvents()
+}
+function bindBatchItemEvents(){
+  $$('#batchItemRows .batch-product,#batchItemRows .batch-qty').forEach(e=>e.addEventListener('input',liveBatchCalc));
+  $$('#batchItemRows .remove-batch-item').forEach(btn=>btn.addEventListener('click',()=>{
+    const row=btn.closest('.batch-product-row');
+    if(row)row.remove();
+    liveBatchCalc()
+  }))
+}
+function renderBatchPackagingRows(items){
+  const clean=sortBatchPackagingByVid(Array.isArray(items)?items:[]);
+  const opts='<option value="">Verpackung wählen …</option>'+state.packaging.map(v=>`<option value="${esc(v.vid)}">${esc(v.vid)} · ${esc(v.name)}</option>`).join('');
+  const shown=clean.length?clean:[{vid:'',qty:1}];
+  $('#batchPackagingRows').innerHTML=shown.map(i=>`<div class="batch-packaging-row"><select class="batch-packaging">${opts}</select><input class="batch-packaging-qty" type="number" min="1" step="1" value="${Math.max(1,num(i?.qty,1))}"><div class="money batch-packaging-line-cost">0,00 €</div><button type="button" class="iconbtn remove-batch-packaging">✕</button></div>`).join('');
+  $$('#batchPackagingRows .batch-packaging-row').forEach((r,idx)=>{
+    const select=r.querySelector('.batch-packaging');
+    if(!select)return;
+    const vid=shown[idx]?.vid||'';
+    select.value=state.packaging.some(v=>v.vid===vid)?vid:'';
+    if(vid&&!select.value){
+      const missing=document.createElement('option');
+      missing.value=vid;
+      missing.textContent=vid+' · Verpackung fehlt';
+      missing.selected=true;
+      select.appendChild(missing);
+    }
+  });
+  bindBatchPackagingEvents()
+}
+function bindBatchPackagingEvents(){
+  $$('#batchPackagingRows .batch-packaging,#batchPackagingRows .batch-packaging-qty').forEach(e=>e.addEventListener('input',liveBatchCalc));
+  $$('#batchPackagingRows .remove-batch-packaging').forEach(btn=>btn.addEventListener('click',()=>{
+    const row=btn.closest('.batch-packaging-row');
+    if(row)row.remove();
+    liveBatchCalc()
+  }))
+}
+function collectBatchDraft(){
+  const items=$$('#batchItemRows .batch-product-row').map(r=>{
+    const product=r.querySelector('.batch-product'),qty=r.querySelector('.batch-qty');
+    return product?{pid:product.value,qty:Math.max(1,num(qty?.value,1))}:null
+  }).filter(i=>i&&i.pid);
+  const packagingItems=$$('#batchPackagingRows .batch-packaging-row').map(r=>{
+    const packaging=r.querySelector('.batch-packaging'),qty=r.querySelector('.batch-packaging-qty');
+    return packaging?{vid:packaging.value,qty:Math.max(1,num(qty?.value,1))}:null
+  }).filter(i=>i&&i.vid);
+  return{
+    key:$('#batchKey').value||crypto.randomUUID(),
+    bid:$('#batchBid').value,
+    name:$('#batchName').value.trim(),
+    status:$('#batchStatus').value,
+    items,
+    packagingItems,
+    targetMargin:num($('#batchTargetMargin').value,30),
+    salePrice:num($('#batchSalePrice').value),
+    useOffsite:$('#batchUseOffsite').checked,
+    useCurrency:$('#batchUseCurrency').checked,
+    useSetup:$('#batchUseSetup').checked,
+    notes:$('#batchNotes').value.trim()
+  }
+}
+function liveBatchCalc(){
+  const b=collectBatchDraft(),c=batchCalc(b);
 
-function collectBatchDraft(){return{key:$('#batchKey').value||crypto.randomUUID(),bid:$('#batchBid').value,name:$('#batchName').value.trim(),status:$('#batchStatus').value,items:$$('#batchItemRows .batch-item-row').map(r=>({pid:r.querySelector('.batch-product').value,qty:Math.max(1,num(r.querySelector('.batch-qty').value,1))})).filter(i=>i.pid),packagingItems:$$('#batchPackagingRows .batch-packaging-row').map(r=>({vid:r.querySelector('.batch-packaging').value,qty:Math.max(1,num(r.querySelector('.batch-packaging-qty').value,1))})).filter(i=>i.vid),targetMargin:num($('#batchTargetMargin').value,30),salePrice:num($('#batchSalePrice').value),useOffsite:$('#batchUseOffsite').checked,useCurrency:$('#batchUseCurrency').checked,useSetup:$('#batchUseSetup').checked,notes:$('#batchNotes').value.trim()}}
-function liveBatchCalc(){const b=collectBatchDraft(),c=batchCalc(b);$$('#batchItemRows .batch-item-row').forEach(r=>{const x=state.products.find(p=>p.pid===r.querySelector('.batch-product').value),q=Math.max(1,num(r.querySelector('.batch-qty').value,1));r.querySelector('.batch-line-cost').textContent=euro(x?productPurchaseCost(x)*q:0)});$$('#batchPackagingRows .batch-packaging-row').forEach(r=>{const x=state.packaging.find(v=>v.vid===r.querySelector('.batch-packaging').value),q=Math.max(1,num(r.querySelector('.batch-packaging-qty').value,1));r.querySelector('.batch-packaging-line-cost').textContent=euro(x?packagingPurchaseCost(x)*q:0)});$('#batchProductsCost').textContent=euro(c.productCost);$('#batchPackagingCostLive').textContent=euro(c.packagingCost);$('#batchTotalCost').textContent=euro(c.total);$('#batchFeesLive').textContent=euro(c.fees);$('#batchProfitLive').textContent=euro(c.profit);$('#batchMarginLive').textContent=pct(c.margin);$('#batchRecommended').textContent=euro(c.recommended);renderBatchProductionPlan(b);if($('#batchKey').value&&typeof renderBatchAssistant==='function')renderBatchAssistant(b)}
+  $$('#batchItemRows .batch-product-row').forEach(r=>{
+    const productSelect=r.querySelector('.batch-product'),
+      qtyInput=r.querySelector('.batch-qty'),
+      costEl=r.querySelector('.batch-line-cost');
+    if(!productSelect||!costEl)return;
+    const x=state.products.find(p=>p.pid===productSelect.value),
+      q=Math.max(1,num(qtyInput?.value,1));
+    costEl.textContent=euro(x?productPurchaseCost(x)*q:0)
+  });
+
+  $$('#batchPackagingRows .batch-packaging-row').forEach(r=>{
+    const packagingSelect=r.querySelector('.batch-packaging'),
+      qtyInput=r.querySelector('.batch-packaging-qty'),
+      costEl=r.querySelector('.batch-packaging-line-cost');
+    if(!packagingSelect||!costEl)return;
+    const x=state.packaging.find(v=>v.vid===packagingSelect.value),
+      q=Math.max(1,num(qtyInput?.value,1));
+    costEl.textContent=euro(x?packagingPurchaseCost(x)*q:0)
+  });
+
+  $('#batchProductsCost').textContent=euro(c.productCost);
+  $('#batchPackagingCostLive').textContent=euro(c.packagingCost);
+  $('#batchTotalCost').textContent=euro(c.total);
+  $('#batchFeesLive').textContent=euro(c.fees);
+  $('#batchProfitLive').textContent=euro(c.profit);
+  $('#batchMarginLive').textContent=pct(c.margin);
+  $('#batchRecommended').textContent=euro(c.recommended);
+
+  try{renderBatchProductionPlan(b)}catch(err){console.error('Batch-Plan:',err)}
+  if($('#batchKey').value&&typeof renderBatchAssistant==='function'){
+    try{renderBatchAssistant(b)}catch(err){console.error('Batch-Assistent:',err)}
+  }
+}
 function openBatch(key=null){
   const dlg=$('#batchDialog');
   const b=key?state.batches.find(x=>x.key===key):null;
   if(key&&!b)return false;
   if(dlg.open)dlg.close();
+  $('#batchItemRows').innerHTML='';
+  $('#batchPackagingRows').innerHTML='';
   $('#batchKey').value=b?.key||'';$('#batchBid').value=b?.bid||'';$('#batchBidLabel').textContent=b?.bid||'BID wird beim Speichern vergeben';$('#batchModalTitle').textContent=b?'Batch bearbeiten':'Neuer Batch';$('#batchName').value=b?.name||'';$('#batchStatus').value=b?.status||'idea';renderBatchItemRows(b?.items||[]);renderBatchPackagingRows(b?.packagingItems||[]);$('#batchTargetMargin').value=b?.targetMargin??30;$('#batchSalePrice').value=b?.salePrice??0;$('#batchUseOffsite').checked=!!b?.useOffsite;$('#batchUseCurrency').checked=!!b?.useCurrency;$('#batchUseSetup').checked=!!b?.useSetup;$('#batchNotes').value=b?.notes||'';$('#deleteBatchBtn').classList.toggle('hidden',!b);
   liveBatchCalc();
   dlg.showModal();
