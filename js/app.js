@@ -49,7 +49,33 @@ $('#deleteProductBtn').onclick=()=>{const key=$('#productKey').value;if(key&&con
 $('#addBatchItemBtn').onclick=()=>{const opts='<option value="">Produkt wählen …</option>'+state.products.map(p=>`<option value="${esc(p.pid)}">${esc(p.pid)} · ${esc(p.name)}</option>`).join('');$('#batchItemRows').insertAdjacentHTML('beforeend',`<div class="batch-item-row"><select class="batch-product">${opts}</select><input class="batch-qty" type="number" min="1" step="1" value="1"><div class="money batch-line-cost">0,00 €</div><button type="button" class="iconbtn remove-batch-item">✕</button></div>`);bindBatchItemEvents();liveBatchCalc()};
 $('#addBatchPackagingBtn').onclick=()=>{const opts='<option value="">Verpackung wählen …</option>'+state.packaging.map(v=>`<option value="${esc(v.vid)}">${esc(v.vid)} · ${esc(v.name)}</option>`).join('');$('#batchPackagingRows').insertAdjacentHTML('beforeend',`<div class="batch-item-row batch-packaging-row"><select class="batch-packaging">${opts}</select><input class="batch-packaging-qty" type="number" min="1" step="1" value="1"><div class="money batch-packaging-line-cost">0,00 €</div><button type="button" class="iconbtn remove-batch-packaging">✕</button></div>`);bindBatchPackagingEvents();liveBatchCalc()};
 ['batchTargetMargin','batchSalePrice','batchUseOffsite','batchUseCurrency','batchUseSetup'].forEach(id=>$('#'+id).addEventListener('input',liveBatchCalc));$('#batchUseRecommendedBtn').onclick=()=>{$('#batchSalePrice').value=batchCalc(collectBatchDraft()).recommended.toFixed(2);liveBatchCalc()};
-$('#batchForm').addEventListener('submit',e=>{if(e.submitter?.value==='cancel')return;e.preventDefault();const b=collectBatchDraft();b.items=sortBatchItemsByPid(b.items);b.packagingItems=sortBatchPackagingByVid(b.packagingItems);if(!b.name){$('#batchName').focus();return}if(!b.bid){state.counters.batch++;b.bid=displayId('BID',state.counters.batch)}const i=state.batches.findIndex(x=>x.key===b.key);if(i>=0)state.batches[i]=b;else state.batches.push(b);saveState();$('#batchDialog').close()});$('#deleteBatchBtn').onclick=()=>{const key=$('#batchKey').value;if(key&&confirm('Batch wirklich löschen?')){state.batches=state.batches.filter(b=>b.key!==key);saveState();$('#batchDialog').close()}};
+$('#batchForm').addEventListener('submit',e=>{
+  if(e.submitter?.value==='cancel')return;
+  e.preventDefault();
+  const b=collectBatchDraft();
+  b.items=sortBatchItemsByPid(b.items);
+  b.packagingItems=sortBatchPackagingByVid(b.packagingItems);
+  if(!b.name){$('#batchName').focus();return}
+  if(!b.bid){state.counters.batch++;b.bid=displayId('BID',state.counters.batch)}
+  const i=state.batches.findIndex(x=>x.key===b.key);
+  if(i>=0)state.batches[i]=b;else state.batches.push(b);
+  localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+  const dlg=$('#batchDialog');
+  if(dlg.open)dlg.close();
+  setTimeout(()=>{
+    renderBatches();
+    try{renderOverview()}catch(err){console.error('Dashboard:',err)}
+  },0);
+});$('#deleteBatchBtn').onclick=()=>{
+  const key=$('#batchKey').value;
+  if(key&&confirm('Batch wirklich löschen?')){
+    state.batches=state.batches.filter(b=>b.key!==key);
+    localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
+    const dlg=$('#batchDialog');
+    if(dlg.open)dlg.close();
+    setTimeout(()=>{renderBatches();try{renderOverview()}catch(err){console.error('Dashboard:',err)}},0);
+  }
+};
 ['listingFee','transactionPct','paymentPct','paymentFixed','offsitePct','currencyPct','feeVatPct','setupFee','setupSales'].forEach(k=>$('#'+k).addEventListener('input',e=>{state.settings[k]=num(e.target.value,defaultState.settings[k]);localStorage.setItem(STORAGE_KEY,JSON.stringify(state));renderOverview();$('#setupPerSale').textContent=euro(state.settings.setupSales>0?state.settings.setupFee/state.settings.setupSales:0)}));
 $('#productsCsvBtn').onclick=exportProductsCsv;$('#packagingCsvBtn').onclick=exportPackagingCsv;$('#batchesCsvBtn').onclick=exportBatchesCsv;$('#exportBackupBtn').onclick=exportBackup;$('#dataBackupBtn').onclick=exportBackup;$('#importBackupBtn').onclick=()=>$('#backupFile').click();$('#dataImportBtn').onclick=()=>$('#backupFile').click();$('#backupFile').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const rawText=(await f.text()).replace(/^\uFEFF/,'');const x=JSON.parse(rawText);if(!Array.isArray(x.products))throw Error();state={...structuredClone(defaultState),...x,settings:{...defaultState.settings,...x.settings},counters:{...defaultState.counters,...x.counters},categoryLearning:{...defaultState.categoryLearning,...x.categoryLearning}};migrateState(state);saveState();alert('Batchies-Backup wurde importiert.')}catch{alert('Ungültiges Batchies-Backup.')}e.target.value=''};
 
