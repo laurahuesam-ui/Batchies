@@ -1,5 +1,80 @@
 function renderAll(){renderOverview();renderProducts();renderPackaging();renderBatches();renderBatchSuggestions();renderSettings();renderInvestments();renderShoppingSimulation()}
-function renderOverview(){const ps=state.products,cs=ps.map(calcProduct);$('#kpiProducts').textContent=ps.length;$('#kpiBatches').textContent=state.batches.length;$('#kpiReady').textContent=ps.filter(p=>p.status==='ready').length+' verkaufsbereit';$('#kpiAvgPrice').textContent=euro(ps.length?cs.reduce((a,c)=>a+c.recommended,0)/ps.length:0);$('#kpiAvgMargin').textContent=pct(ps.length?cs.reduce((a,c)=>a+c.margin,0)/ps.length:0);const s=state.settings;$('#feeRateSummary').textContent=(s.transactionPct+s.paymentPct).toFixed(2).replace('.',',')+' %';$('#feeFixedSummary').textContent=euro(s.listingFee+s.paymentFixed);$('#feeAdsSummary').textContent=s.offsitePct.toFixed(2).replace('.',',')+' %';$('#feeFxSummary').textContent=s.currencyPct.toFixed(2).replace('.',',')+' %';const el=$('#overviewProducts');if(!ps.length){el.innerHTML='<div class="empty"><strong>Noch keine Produkte</strong>Lege dein erstes Produkt an.<br><button class="btn primary" style="margin-top:10px" onclick="openProduct()">+ Produkt</button></div>';return}el.innerHTML='<div class="table-wrap"><table><thead><tr><th>ID</th><th>Produkt</th><th>Status</th><th>Kosten</th><th>VK</th><th>Marge</th></tr></thead><tbody>'+ps.slice(-6).reverse().map(p=>{const c=calcProduct(p);return `<tr style="cursor:pointer" onclick="openProduct('${p.key}')"><td><span class="idchip">${esc(p.pid)}</span></td><td><div class="name">${esc(p.name)}</div>${productColorDots(p.colors,true)}</td><td><span class="badge ${p.status}">${statusLabel(p.status)}</span></td><td class="money">${euro(c.costs)}</td><td class="money">${euro(p.salePrice)}</td><td>${pct(c.margin)}</td></tr>`}).join('')+'</tbody></table></div>'}
+function productIsCalculable(p){
+  const s=(p?.suppliers||[]).find(x=>x.preferred)||(p?.suppliers||[])[0];
+  if(!s)return false;
+  const unit=supplierLandedUnitCost(s);
+  return Number.isFinite(unit)&&unit>0
+}
+function packagingIsCalculable(v){
+  const s=(v?.suppliers||[]).find(x=>x.preferred)||(v?.suppliers||[])[0];
+  if(!s)return false;
+  const unit=supplierLandedUnitCost(s);
+  return Number.isFinite(unit)&&unit>0
+}
+function batchIsCalculable(b){
+  const products=(b.items||[]);
+  const packaging=(b.packagingItems||[]);
+  if(!products.length)return false;
+  return products.every(i=>{
+    const p=state.products.find(x=>x.pid===i.pid);
+    return p&&productIsCalculable(p)
+  })&&packaging.every(i=>{
+    const v=state.packaging.find(x=>x.vid===i.vid);
+    return v&&packagingIsCalculable(v)
+  })
+}
+function renderOverview(){
+  const ps=state.products||[],bs=state.batches||[];
+  const productCalcCount=ps.filter(productIsCalculable).length;
+  const batchCalcCount=bs.filter(batchIsCalculable).length;
+
+  $('#kpiProducts').textContent=ps.length;
+  $('#kpiBatches').textContent=bs.length;
+  $('#kpiReady').textContent=ps.filter(p=>p.status==='ready').length+' verkaufsbereit';
+  $('#kpiBatchesReady').textContent=bs.filter(b=>b.status==='ready').length+' verkaufsbereit';
+  $('#kpiProductsCalc').textContent=productCalcCount+' / '+ps.length;
+  $('#kpiProductsCalcSub').textContent=(ps.length-productCalcCount)+' noch unvollständig';
+  $('#kpiBatchesCalc').textContent=batchCalcCount+' / '+bs.length;
+  $('#kpiBatchesCalcSub').textContent=(bs.length-batchCalcCount)+' noch unvollständig';
+
+  const s=state.settings;
+  $('#feeRateSummary').textContent=(s.transactionPct+s.paymentPct).toFixed(2).replace('.',',')+' %';
+  $('#feeFixedSummary').textContent=euro(s.listingFee+s.paymentFixed);
+  $('#feeAdsSummary').textContent=s.offsitePct.toFixed(2).replace('.',',')+' %';
+  $('#feeFxSummary').textContent=s.currencyPct.toFixed(2).replace('.',',')+' %';
+
+  const el=$('#overviewProducts');
+  if(!ps.length){
+    el.innerHTML='<div class="empty"><strong>Noch keine Produkte</strong>Lege dein erstes Produkt an.</div>'
+  }else{
+    el.innerHTML='<div class="table-wrap"><table><thead><tr><th>ID</th><th>Produkt</th><th>Status</th><th>Kosten</th><th>VK</th><th>Marge</th></tr></thead><tbody>'+
+      ps.slice(-6).reverse().map(p=>{const c=calcProduct(p);return `<tr><td><span class="idchip">${esc(p.pid)}</span></td><td><div class="name">${esc(p.name)}</div>${productColorDots(p.colors,true)}</td><td><span class="badge ${p.status}">${statusLabel(p.status)}</span></td><td class="money">${euro(c.costs)}</td><td class="money">${euro(p.salePrice)}</td><td>${pct(c.margin)}</td></tr>`}).join('')+
+      '</tbody></table></div>'
+  }
+
+  const bel=$('#overviewBatches');
+  if(!bs.length){
+    bel.innerHTML='<div class="empty"><strong>Noch keine Batches</strong>Lege deinen ersten Batch an.</div>';
+    return
+  }
+  bel.innerHTML='<div class="table-wrap"><table class="overview-batch-table"><thead><tr>'+
+    '<th class="ob-id">BID</th><th class="ob-name">Batch</th><th class="ob-status">Status</th><th class="ob-products">Produkte</th><th class="ob-vid">VID</th><th class="ob-ek">EK</th><th class="ob-vk">Empf. VK</th><th class="ob-ak">1. AK</th>'+
+    '</tr></thead><tbody>'+
+    bs.slice().sort((a,b)=>parseIdNumber(a.bid,'BID')-parseIdNumber(b.bid,'BID')).map(b=>{
+      const c=batchCalc(b),plan=batchProductionPlan(b);
+      return `<tr>
+        <td class="ob-id"><span class="idchip">${esc(b.bid)}</span></td>
+        <td class="ob-name"><div class="name">${esc(b.name)}</div></td>
+        <td class="ob-status"><span class="badge ${b.status}">${statusLabel(b.status)}</span></td>
+        <td class="ob-products"><div class="batch-products-list">${(b.items||[]).map(i=>esc(i.pid)+' × '+num(i.qty,1)).join(', ')||'–'}</div></td>
+        <td class="ob-vid"><div class="batch-vid-list">${(b.packagingItems||[]).map(i=>esc(i.vid)+' × '+num(i.qty,1)).join(', ')||'–'}</div></td>
+        <td class="money ob-ek">${euro(c.total)}</td>
+        <td class="money positive ob-vk">${euro(c.recommended)}</td>
+        <td class="money ob-ak">${euro(plan.firstOrderCost)}</td>
+      </tr>`
+    }).join('')+
+    '</tbody></table></div>'
+}
 function renderSettings(){const s=state.settings;['listingFee','transactionPct','paymentPct','paymentFixed','offsitePct','currencyPct','feeVatPct','setupFee','setupSales'].forEach(k=>{const e=$('#'+k);if(e&&document.activeElement!==e)e.value=s[k]});$('#setupPerSale').textContent=euro(s.setupSales>0?s.setupFee/s.setupSales:0)}
 $$('.tab').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab)));$$('[data-go]').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.go)));function switchTab(t){$$('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));$$('.tabpage').forEach(p=>p.classList.add('hidden'));$('#tab-'+t).classList.remove('hidden')}
 initColorFilter();$('#addProductBtn').onclick=()=>openProduct();

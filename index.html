@@ -22,23 +22,40 @@
 .color-picker{display:flex;flex-wrap:wrap;gap:7px}.color-choice{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:6px 9px;margin:0;background:#fff;color:var(--text);cursor:pointer;user-select:none}.color-choice:hover,.color-choice.selected{border-color:#7aa18a;background:var(--green3)}.color-choice{width:auto;appearance:none;-webkit-appearance:none;font:inherit}.color-choice:focus{outline:none;box-shadow:none}.color-choice-dot,.product-color-dot{display:inline-block;width:16px;height:16px;border-radius:50%;background:var(--dot);border:1px solid rgba(0,0,0,.22);box-shadow:inset 0 0 0 1px rgba(255,255,255,.25)}.product-color-dots{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:6px}.product-color-dots.compact{margin-top:4px}.product-color-dot{width:14px;height:14px}.color-filter{width:auto;min-width:130px}
 
 .sim-batch-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:9px}.sim-batch-option{display:flex;align-items:flex-start;gap:9px;padding:10px 11px;border:1px solid var(--line);border-radius:12px;background:#fbfdfb}.sim-batch-option input{width:auto;margin-top:3px;accent-color:var(--green)}.sim-batch-option.selected{border-color:#8eae99;background:var(--green3)}.sim-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}.sim-kpi{padding:12px;border:1px solid var(--line);border-radius:12px;background:#f7faf7}.sim-kpi .label{font-size:10px;color:var(--muted)}.sim-kpi .value{font-size:20px;font-weight:850;margin-top:2px}.sim-result-table{min-width:900px}.sim-result-table th:nth-child(1),.sim-result-table td:nth-child(1){width:100px}.sim-result-table th:nth-child(4),.sim-result-table td:nth-child(4){width:150px}.sim-result-table tr.possible td{background:#f2faf5}.sim-missing{display:grid;gap:3px;font-size:11px}.sim-missing .missing-line{display:flex;justify-content:space-between;gap:12px}.sim-stock-table{min-width:760px}.sim-stock-table th:first-child,.sim-stock-table td:first-child{width:110px}.sim-stock-table th:nth-child(3),.sim-stock-table td:nth-child(3){width:130px}.sim-stock-table th:nth-child(4),.sim-stock-table td:nth-child(4){width:120px}@media(max-width:760px){.sim-summary{grid-template-columns:repeat(2,1fr)}}
-.batch-table th+th,.batch-table td+td{padding-left:3px}.batch-table th,.batch-table td{border-left-width:0}</style>
+.batch-table th+th,.batch-table td+td{padding-left:3px}.batch-table th,.batch-table td{border-left-width:0}
+.overview-batch-table{table-layout:fixed;min-width:980px}
+.overview-batch-table th,.overview-batch-table td{padding:7px 5px}
+.overview-batch-table .ob-id{width:8%;white-space:nowrap}
+.overview-batch-table .ob-name{width:18%}
+.overview-batch-table .ob-status{width:10%;white-space:nowrap}
+.overview-batch-table .ob-products{width:22%}
+.overview-batch-table .ob-vid{width:12%}
+.overview-batch-table .ob-ek{width:10%;white-space:nowrap}
+.overview-batch-table .ob-vk{width:10%;white-space:nowrap}
+.overview-batch-table .ob-ak{width:10%;white-space:nowrap}
+</style>
 </head>
 <body>
 <div class="app">
 <header class="topbar">
-  <div class="brand"><div class="logo">B</div><div><h1>Batchies</h1><div class="subtitle">Produktentwicklung & Stammdaten · v2.5.8</div></div></div>
+  <div class="brand"><div class="logo">B</div><div><h1>Batchies</h1><div class="subtitle">Produktentwicklung & Stammdaten · v2.5.9</div></div></div>
   <div class="actions"><button class="btn" id="exportBackupBtn">Backup</button><button class="btn" id="importBackupBtn">Import</button><button class="btn primary" id="addProductBtn">+ Produkt</button><button class="btn primary" id="addBatchBtn">+ Batch</button><input type="file" id="backupFile" accept="application/json" hidden></div>
 </header>
 <nav class="tabs"><button class="tab active" data-tab="overview">Übersicht</button><button class="tab" data-tab="products">Produkte</button><button class="tab" data-tab="packaging">Verpackung</button><button class="tab" data-tab="batches">Batches</button><button class="tab" data-tab="fees">Gebühren & Kalkulation</button><button class="tab" data-tab="investments">Investitionen</button><button class="tab" data-tab="simulation">Einkaufs-Simulation</button><button class="tab" data-tab="data">Stammdaten & CSV</button></nav>
 <main>
 <section id="tab-overview" class="tabpage"><div class="grid">
   <div class="card span3"><div class="kpi-label">Produkte</div><div class="kpi-value" id="kpiProducts">0</div><div class="kpi-sub" id="kpiReady">0 verkaufsbereit</div></div>
-  <div class="card span3"><div class="kpi-label">Batches</div><div class="kpi-value" id="kpiBatches">0</div><div class="kpi-sub">gespeicherte Batch-Stammdaten</div></div>
-  <div class="card span3"><div class="kpi-label">Ø empfohlener VK</div><div class="kpi-value" id="kpiAvgPrice">0,00 €</div><div class="kpi-sub">nach Zielmarge</div></div>
-  <div class="card span3"><div class="kpi-label">Ø Ist-Marge</div><div class="kpi-value" id="kpiAvgMargin">0,0 %</div><div class="kpi-sub">beim eingetragenen VK</div></div>
+  <div class="card span3"><div class="kpi-label">Batches</div><div class="kpi-value" id="kpiBatches">0</div><div class="kpi-sub" id="kpiBatchesReady">0 verkaufsbereit</div></div>
+  <div class="card span3"><div class="kpi-label">Produkte kalkulierbar</div><div class="kpi-value" id="kpiProductsCalc">0 / 0</div><div class="kpi-sub" id="kpiProductsCalcSub">bevorzugter Lieferant mit Preis</div></div>
+  <div class="card span3"><div class="kpi-label">Batches kalkulierbar</div><div class="kpi-value" id="kpiBatchesCalc">0 / 0</div><div class="kpi-sub" id="kpiBatchesCalcSub">alle PIDs und VIDs kalkulierbar</div></div>
+
   <div class="card span8"><div class="toolbar"><h2 class="section-title">Letzte Produkte</h2><button class="btn" data-go="products">Alle Produkte</button></div><div id="overviewProducts"></div></div>
   <div class="card span4"><h2 class="section-title">Etsy-Kostenmodell</h2><div class="calcrow"><span>Variable Standardgebühren</span><strong id="feeRateSummary">10,50 %</strong></div><div class="calcrow"><span>Fix pro Verkauf</span><strong id="feeFixedSummary">0,48 €</strong></div><div class="calcrow"><span>Offsite Ads optional</span><strong id="feeAdsSummary">15,00 %</strong></div><div class="calcrow"><span>Währungsumrechnung optional</span><strong id="feeFxSummary">2,50 %</strong></div></div>
+
+  <div class="card span12">
+    <div class="toolbar"><div><h2 class="section-title" style="margin-bottom:2px">Batch-Übersicht</h2><div class="muted">Kompakter Überblick über alle gespeicherten Batches.</div></div><button class="btn" data-go="batches">Alle Batches bearbeiten</button></div>
+    <div id="overviewBatches"></div>
+  </div>
 </div></section>
 <section id="tab-products" class="tabpage hidden"><div class="card"><div class="toolbar"><div><h2 class="section-title" style="margin-bottom:2px">Produkt-Stammdaten</h2><div class="muted">PID, Lieferanten vergleichen, Produktbild und Kalkulation.</div></div><div class="inline"><select id="filterProductColor" class="color-filter" title="Nach Farbe filtern"></select><input class="search" id="searchProducts" placeholder="Produkte suchen …"></div></div><div id="productsTable"></div></div></section>
 
