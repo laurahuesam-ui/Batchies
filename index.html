@@ -33,12 +33,20 @@
 .overview-batch-table .ob-ek{width:10%;white-space:nowrap}
 .overview-batch-table .ob-vk{width:10%;white-space:nowrap}
 .overview-batch-table .ob-ak{width:10%;white-space:nowrap}
+
+.supplier-tier-actions{display:flex;align-items:center;gap:10px;margin:6px 0 0 120px}
+.supplier-tier-panel{margin:8px 0 14px 120px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#fafcf9}
+.supplier-tier-section+.supplier-tier-section{margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}
+.toolbar.compact{margin-bottom:7px}
+.supplier-price-tier-row{display:grid;grid-template-columns:120px 140px 140px 38px;gap:7px;margin-bottom:6px}
+.supplier-shipping-point-row{display:grid;grid-template-columns:120px 140px 210px 38px;gap:7px;margin-bottom:6px}
+@media(max-width:900px){.supplier-tier-actions,.supplier-tier-panel{margin-left:0}.supplier-price-tier-row,.supplier-shipping-point-row{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <div class="app">
 <header class="topbar">
-  <div class="brand"><div class="logo">B</div><div><h1>Batchies</h1><div class="subtitle">Produktentwicklung & Stammdaten · v2.5.9</div></div></div>
+  <div class="brand"><div class="logo">B</div><div><h1>Batchies</h1><div class="subtitle">Produktentwicklung & Stammdaten · v2.6.0</div></div></div>
   <div class="actions"><button class="btn" id="exportBackupBtn">Backup</button><button class="btn" id="importBackupBtn">Import</button><button class="btn primary" id="addProductBtn">+ Produkt</button><button class="btn primary" id="addBatchBtn">+ Batch</button><input type="file" id="backupFile" accept="application/json" hidden></div>
 </header>
 <nav class="tabs"><button class="tab active" data-tab="overview">Übersicht</button><button class="tab" data-tab="products">Produkte</button><button class="tab" data-tab="packaging">Verpackung</button><button class="tab" data-tab="batches">Batches</button><button class="tab" data-tab="fees">Gebühren & Kalkulation</button><button class="tab" data-tab="investments">Investitionen</button><button class="tab" data-tab="simulation">Einkaufs-Simulation</button><button class="tab" data-tab="data">Stammdaten & CSV</button></nav>

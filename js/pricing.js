@@ -2,10 +2,12 @@ function variableFeeRate(p){const s=state.settings;let r=(s.transactionPct+s.pay
 function fixedFees(p){const s=state.settings;let f=s.listingFee+s.paymentFixed;if(p?.useSetup&&s.setupSales>0)f+=s.setupFee/s.setupSales;return f}
 function supplierQtyBase(s){if(!s)return 1;return s.priceType==='set'?Math.max(1,num(s.setQty,1)):Math.max(1,num(s.minOrderQty,1))}
 function supplierUnitPrice(s){if(!s)return 0;if(s.priceType==='set')return num(s.setPrice)/Math.max(1,num(s.setQty,1));return num(s.price)}
-function supplierUnitShipping(s){return s?num(s.totalShipping)/supplierQtyBase(s):0}
-function supplierBaseOrderCost(s){if(!s)return 0;return s.priceType==='set'?num(s.setPrice)+num(s.totalShipping):supplierUnitPrice(s)*Math.max(1,num(s.minOrderQty,1))+num(s.totalShipping)}
+function supplierTierUnitPrice(s,qty=supplierQtyBase(s)){const tiers=(s?.priceTiers||[]).slice().sort((a,b)=>num(a.minQty)-num(b.minQty));const q=Math.max(1,num(qty,1));const hit=tiers.find(x=>q>=Math.max(1,num(x.minQty,1))&&(!num(x.maxQty)||q<=num(x.maxQty)));return hit&&num(hit.unitPrice)>0?num(hit.unitPrice):supplierUnitPrice(s)}
+function supplierShippingForQty(s,qty=supplierQtyBase(s)){const q=Math.max(1,num(qty,1)),points=s?.shippingPoints||[],hit=points.find(x=>Math.max(1,num(x.qty,1))===q);if(hit){const actual=num(hit.shippingWithCustoms);return actual>0?{shipping:actual,includesCustoms:true}: {shipping:num(hit.shipping),includesCustoms:false}}return{shipping:num(s?.totalShipping),includesCustoms:false}}
+function supplierUnitShipping(s){if(!s)return 0;const q=supplierQtyBase(s),ship=supplierShippingForQty(s,q);return ship.shipping/q}
+function supplierBaseOrderCost(s){if(!s)return 0;const q=supplierQtyBase(s),ship=supplierShippingForQty(s,q);return (s.priceType==='set'?num(s.setPrice):supplierTierUnitPrice(s,q)*q)+ship.shipping}
 function supplierHasCustoms(s){return !!s&&!!s.customs}
-function supplierCustomsCost(s){return supplierHasCustoms(s)?supplierBaseOrderCost(s)*0.12:0}
+function supplierCustomsCost(s){if(!supplierHasCustoms(s))return 0;const q=supplierQtyBase(s),ship=supplierShippingForQty(s,q);if(ship.includesCustoms)return 0;return supplierBaseOrderCost(s)*0.12}
 function supplierOrderCost(s){return supplierBaseOrderCost(s)+supplierCustomsCost(s)}
 function supplierLandedUnitCost(s){return s?supplierOrderCost(s)/supplierQtyBase(s):0}
 function productInboundShipping(p){const s=(p.suppliers||[]).find(x=>x.preferred)||(p.suppliers||[])[0];if(!s)return 0;const ship=supplierUnitShipping(s),customs=supplierHasCustoms(s)?(num(p.basePrice)+ship)*0.12:0;return ship+customs}
