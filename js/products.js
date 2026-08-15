@@ -34,37 +34,58 @@ function syncSupplierMainFieldsFromTiers(r){
   if(!r)return;
 
   const tiers=collectSupplierPriceTiers(r);
+  const points=collectSupplierShippingPoints(r);
   const qtyInput=r.querySelector('.supplier-qty');
   const type=r.querySelector('.supplier-price-type')?.value==='set'?'set':'unit';
   const priceInput=r.querySelector('.supplier-price-entry');
   const shippingInput=r.querySelector('.supplier-total-shipping');
+  const customsInput=r.querySelector('.supplier-customs');
 
-  // 1. Kleinste bekannte Preisstaffel = automatische Mindestbestellmenge.
+  // Nur leere Hauptfelder automatisch ausfüllen.
+  // Bereits manuell eingetragene Werte bleiben unangetastet.
   if(tiers.length){
     const minQty=Math.min(...tiers.map(t=>Math.max(1,num(t.minQty,1))));
-    if(qtyInput){
+
+    if(qtyInput && (!qtyInput.value || num(qtyInput.value)<=0)){
       qtyInput.value=minQty;
+      qtyInput.dataset.autoFromTier='1';
     }
 
-    // 2. Bei Stückpreis-Lieferanten den Preis der passenden Staffel übernehmen.
-    if(type==='unit' && priceInput){
-      const hit=tiers.find(t=>minQty>=Math.max(1,num(t.minQty,1)) && (!num(t.maxQty) || minQty<=num(t.maxQty)));
+    const effectiveQty=Math.max(1,num(qtyInput?.value,minQty));
+
+    if(type==='unit' && priceInput && (!priceInput.value || num(priceInput.value)<=0)){
+      const hit=tiers.find(t=>effectiveQty>=Math.max(1,num(t.minQty,1)) && (!num(t.maxQty) || effectiveQty<=num(t.maxQty)));
       if(hit && num(hit.unitPrice)>0){
         priceInput.value=num(hit.unitPrice);
+        priceInput.dataset.autoFromTier='1';
       }
     }
 
-    // 3. Versandpunkt für exakt diese Menge automatisch übernehmen.
-    const points=collectSupplierShippingPoints(r);
-    const shipPoint=points.find(p=>Math.max(1,num(p.qty,1))===minQty);
-    if(shipPoint && shippingInput){
+    const shipPoint=points.find(p=>Math.max(1,num(p.qty,1))===effectiveQty);
+    if(shipPoint){
       const withCustoms=num(shipPoint.shippingWithCustoms);
       const normal=num(shipPoint.shipping);
-      shippingInput.value=withCustoms>0 ? withCustoms : normal;
-      shippingInput.dataset.autoFromShippingPoint='1';
-      shippingInput.title=withCustoms>0
-        ? 'Automatisch aus Versand-Kalkulationspunkt übernommen: inklusive Zollabwicklung'
-        : 'Automatisch aus Versand-Kalkulationspunkt übernommen';
+
+      // Wenn Versand inkl. Zollabwicklung vorhanden ist:
+      // Zoll-Haken automatisch AUS, weil bereits enthalten.
+      if(withCustoms>0 && customsInput){
+        customsInput.checked=false;
+        customsInput.dataset.autoDisabledByShipping='1';
+        customsInput.title='12 % Zoll deaktiviert, da Versand inkl. Zollabwicklung hinterlegt ist';
+      }
+
+      // Versand-Hauptfeld nur füllen, wenn es leer ist oder zuvor automatisch gesetzt wurde.
+      if(shippingInput && (
+        !shippingInput.value ||
+        num(shippingInput.value)<=0 ||
+        shippingInput.dataset.autoFromShippingPoint==='1'
+      )){
+        shippingInput.value=withCustoms>0 ? withCustoms : normal;
+        shippingInput.dataset.autoFromShippingPoint='1';
+        shippingInput.title=withCustoms>0
+          ? 'Automatisch aus Versand-Kalkulationspunkt übernommen: inklusive Zollabwicklung'
+          : 'Automatisch aus Versand-Kalkulationspunkt übernommen';
+      }
     }
   }
 
@@ -112,7 +133,34 @@ function updateSupplierTierSummary(r){const pc=r.querySelectorAll('.supplier-pri
 function collectSupplierPriceTiers(r){return [...r.querySelectorAll('.supplier-price-tier-row')].map(x=>({minQty:Math.max(1,num(x.querySelector('.tier-min')?.value,1)),maxQty:num(x.querySelector('.tier-max')?.value)||null,unitPrice:num(x.querySelector('.tier-price')?.value)})).filter(x=>x.unitPrice>0).sort((a,b)=>a.minQty-b.minQty)}
 function collectSupplierShippingPoints(r){return [...r.querySelectorAll('.supplier-shipping-point-row')].map(x=>({qty:Math.max(1,num(x.querySelector('.ship-point-qty')?.value,1)),shipping:num(x.querySelector('.ship-point-normal')?.value),shippingWithCustoms:num(x.querySelector('.ship-point-customs')?.value)})).filter(x=>x.shipping>0||x.shippingWithCustoms>0).sort((a,b)=>a.qty-b.qty)}
 function updateSupplierDerived(r){if(!r)return;const type=r.querySelector('.supplier-price-type').value==='set'?'set':'unit',entry=num(r.querySelector('.supplier-price-entry').value),qty=Math.max(1,num(r.querySelector('.supplier-qty').value,1)),ship=num(r.querySelector('.supplier-total-shipping').value),customs=!!r.querySelector('.supplier-customs')?.checked,baseOrder=type==='set'?entry+ship:entry*qty+ship,order=baseOrder*(customs?1.12:1);const pl=r.querySelector('.supplier-price-label');if(pl)pl.textContent=type==='set'?'Setpreis':'Stückpreis';const ql=r.querySelector('.supplier-qty-label');if(ql)ql.textContent=type==='set'?'Stück im Set':'Mindestbestellmenge';r.querySelector('.supplier-qty').placeholder=type==='set'?'Stück im Set':'MOQ';const unit=order/qty;const uc=r.querySelector('.supplier-unit-cost');if(uc){uc.value=euro(unit);uc.title='Preis pro Stück inklusive anteiligem Versand'+(customs?' und 12 % Zollpuffer':'')}const oc=r.querySelector('.supplier-order-cost');oc.value=euro(order);oc.title=customs?'Warenwert + Versand + 12 % Zollpuffer':(type==='set'?'Setpreis + Versand':'Stückpreis × Mindestbestellmenge + Versand')}
-function bindSupplierEvents(){$$('.supplier-row').forEach(r=>{const name=r.querySelector('.supplier-name'),customs=r.querySelector('.supplier-customs');if(name&&customs){let wasAlibaba=isAlibabaSupplierName(name.value);name.addEventListener('input',()=>{const nowAlibaba=isAlibabaSupplierName(name.value);if(nowAlibaba&&!wasAlibaba)customs.checked=true;wasAlibaba=nowAlibaba;customs.disabled=false;customs.title=nowAlibaba?'Alibaba: 12 % Zoll automatisch vorausgewählt – kann ausgeschaltet werden':'12 % Zollpuffer auf Warenwert inklusive Versand';updateSupplierDerived(r);updateSupplierTierUnitDisplays(r);liveCalc()});customs.disabled=false;customs.title=wasAlibaba?'Alibaba: 12 % Zoll automatisch vorausgewählt – kann ausgeschaltet werden':'12 % Zollpuffer auf Warenwert inklusive Versand'}});$$('.supplier-row').forEach(r=>{r.querySelectorAll('input,select').forEach(el=>{el.oninput=()=>{updateSupplierDerived(r);updateSupplierTierUnitDisplays(r);liveCalc()};el.onchange=()=>{updateSupplierDerived(r);updateSupplierTierUnitDisplays(r);liveCalc()}});r.querySelector('.supplier-star').onchange=()=>{if(r.querySelector('.supplier-star').checked){const img=r.querySelector('.supplier-image').value.trim();if(img){$('#productImageUrl').value=img;draftImageData='';renderImagePreview(img)}}liveCalc()};r.querySelector('.supplier-image').onchange=()=>{const img=r.querySelector('.supplier-image').value.trim();if(r.querySelector('.supplier-star').checked&&img){$('#productImageUrl').value=img;draftImageData='';renderImagePreview(img)}liveCalc()};r.querySelector('.remove-supplier').onclick=()=>{if($$('.supplier-row').length<=1){alert('Mindestens ein Lieferant muss vorhanden bleiben.');return}const wasPreferred=r.querySelector('.supplier-star').checked;r.remove();if(wasPreferred&&$$('.supplier-star')[0])$$('.supplier-star')[0].checked=true;liveCalc()};const toggle=r.querySelector('.toggle-supplier-tiers');if(toggle)toggle.onclick=()=>r.querySelector('.supplier-tier-panel')?.classList.toggle('hidden');const addTier=r.querySelector('.add-price-tier');if(addTier)addTier.onclick=()=>{r.querySelector('.supplier-price-tiers').insertAdjacentHTML('beforeend',priceTierRowHtml({minQty:1}));bindSupplierEvents();updateSupplierTierSummary(r);updateSupplierTierUnitDisplays(r);syncSupplierMainFieldsFromTiers(r)};const addShip=r.querySelector('.add-shipping-point');if(addShip)addShip.onclick=()=>{r.querySelector('.supplier-shipping-points').insertAdjacentHTML('beforeend',shippingPointRowHtml({qty:1}));bindSupplierEvents();updateSupplierTierSummary(r);updateSupplierTierUnitDisplays(r);syncSupplierMainFieldsFromTiers(r)};r.querySelectorAll('.remove-price-tier').forEach(b=>b.onclick=()=>{b.closest('.supplier-price-tier-row')?.remove();updateSupplierTierSummary(r);updateSupplierTierUnitDisplays(r);syncSupplierMainFieldsFromTiers(r);liveCalc()});r.querySelectorAll('.remove-shipping-point').forEach(b=>b.onclick=()=>{b.closest('.supplier-shipping-point-row')?.remove();updateSupplierTierSummary(r);updateSupplierTierUnitDisplays(r);syncSupplierMainFieldsFromTiers(r);liveCalc()});r.querySelectorAll('.supplier-price-tier-row input,.supplier-shipping-point-row input').forEach(el=>el.oninput=()=>{updateSupplierTierSummary(r);updateSupplierTierUnitDisplays(r);syncSupplierMainFieldsFromTiers(r);liveCalc()})})}
+function bindSupplierEvents(){$$('.supplier-row').forEach(r=>{const name=r.querySelector('.supplier-name'),customs=r.querySelector('.supplier-customs');if(name&&customs){let wasAlibaba=isAlibabaSupplierName(name.value);name.addEventListener('input',()=>{const nowAlibaba=isAlibabaSupplierName(name.value);if(nowAlibaba&&!wasAlibaba)customs.checked=true;wasAlibaba=nowAlibaba;customs.disabled=false;customs.title=nowAlibaba?'Alibaba: 12 % Zoll automatisch vorausgewählt – kann ausgeschaltet werden':'12 % Zollpuffer auf Warenwert inklusive Versand';updateSupplierDerived(r);updateSupplierTierUnitDisplays(r);liveCalc()});customs.disabled=false;customs.title=wasAlibaba?'Alibaba: 12 % Zoll automatisch vorausgewählt – kann ausgeschaltet werden':'12 % Zollpuffer auf Warenwert inklusive Versand'}});$$('.supplier-row').forEach(r=>{r.querySelectorAll('input,select').forEach(el=>{el.oninput=()=>{updateSupplierDerived(r);updateSupplierTierUnitDisplays(r);liveCalc()};el.onchange=()=>{updateSupplierDerived(r);updateSupplierTierUnitDisplays(r);liveCalc()}});r.querySelector('.supplier-star').onchange=()=>{if(r.querySelector('.supplier-star').checked){const img=r.querySelector('.supplier-image').value.trim();if(img){$('#productImageUrl').value=img;draftImageData='';renderImagePreview(img)}}liveCalc()};r.querySelector('.supplier-image').onchange=()=>{const img=r.querySelector('.supplier-image').value.trim();if(r.querySelector('.supplier-star').checked&&img){$('#productImageUrl').value=img;draftImageData='';renderImagePreview(img)}liveCalc()};r.querySelector('.remove-supplier').onclick=()=>{if($$('.supplier-row').length<=1){alert('Mindestens ein Lieferant muss vorhanden bleiben.');return}const wasPreferred=r.querySelector('.supplier-star').checked;r.remove();if(wasPreferred&&$$('.supplier-star')[0])$$('.supplier-star')[0].checked=true;liveCalc()};const toggle=r.querySelector('.toggle-supplier-tiers');if(toggle)toggle.onclick=()=>r.querySelector('.supplier-tier-panel')?.classList.toggle('hidden');const addTier=r.querySelector('.add-price-tier');if(addTier)addTier.onclick=()=>{r.querySelector('.supplier-price-tiers').insertAdjacentHTML('beforeend',priceTierRowHtml({minQty:1}));bindSupplierEvents();updateSupplierTierSummary(r);updateSupplierTierUnitDisplays(r);syncSupplierMainFieldsFromTiers(r)};const addShip=r.querySelector('.add-shipping-point');if(addShip)addShip.onclick=()=>{r.querySelector('.supplier-shipping-points').insertAdjacentHTML('beforeend',shippingPointRowHtml({qty:1}));bindSupplierEvents();updateSupplierTierSummary(r);updateSupplierTierUnitDisplays(r);syncSupplierMainFieldsFromTiers(r)};r.querySelectorAll('.remove-price-tier').forEach(b=>b.onclick=()=>{b.closest('.supplier-price-tier-row')?.remove();updateSupplierTierSummary(r);updateSupplierTierUnitDisplays(r);syncSupplierMainFieldsFromTiers(r);liveCalc()});r.querySelectorAll('.remove-shipping-point').forEach(b=>b.onclick=()=>{
+  b.closest('.supplier-shipping-point-row')?.remove();
+  const customs=r.querySelector('.supplier-customs');
+  const anyIncluded=[...r.querySelectorAll('.ship-point-customs')].some(x=>num(x.value)>0);
+  if(customs && !anyIncluded){
+    delete customs.dataset.autoDisabledByShipping;
+    customs.title=isAlibabaSupplierName(r.querySelector('.supplier-name')?.value)
+      ? 'Alibaba: 12 % Zoll automatisch vorausgewählt – kann ausgeschaltet werden'
+      : '12 % Zollpuffer auf Warenwert inklusive Versand';
+  }
+  updateSupplierTierSummary(r);
+  updateSupplierTierUnitDisplays(r);
+  syncSupplierMainFieldsFromTiers(r);
+  liveCalc()
+});r.querySelectorAll('.supplier-price-tier-row input,.supplier-shipping-point-row input').forEach(el=>el.oninput=()=>{
+  if(el.classList.contains('ship-point-customs') && num(el.value)>0){
+    const customs=r.querySelector('.supplier-customs');
+    if(customs){
+      customs.checked=false;
+      customs.dataset.autoDisabledByShipping='1';
+      customs.title='12 % Zoll deaktiviert, da Versand inkl. Zollabwicklung hinterlegt ist';
+    }
+  }
+  updateSupplierTierSummary(r);
+  updateSupplierTierUnitDisplays(r);
+  syncSupplierMainFieldsFromTiers(r);
+  liveCalc()
+})})}
 function preferredSupplier(){return collectSuppliers().find(s=>s.preferred)||collectSuppliers()[0]}
 function liveCalc(){const p=collectProductDraft(),c=calcProduct(p);$('#liveCost').textContent=euro(c.costs);$('#liveFees').textContent=euro(c.fees);$('#liveProfit').textContent=euro(c.profit);$('#liveProfit').className=c.profit>=0?'positive':'negative';$('#liveMargin').textContent=pct(c.margin);$('#recommendedPrice').textContent=euro(c.recommended)}
 function renderImagePreview(src){const w=$('#imagePreviewWrap');if(src){w.className='';w.innerHTML=`<img class="preview" src="${esc(src)}" alt="Produktbild" onerror="this.parentElement.className='preview emptyimg';this.parentElement.textContent='Bild konnte nicht geladen werden'">`}else{w.className='preview emptyimg';w.textContent='Noch kein Bild'}}
