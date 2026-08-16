@@ -354,22 +354,63 @@ function renderSalesGrowthStages(){
   $$('.sales-stage-select').forEach(sel=>sel.onchange=()=>{
     const row=sel.closest('.sales-stage-row'),idx=Number(row.dataset.index);
     state.salesGrowthSimulation.stages[idx]=sel.value;
-    salesGrowthSanitizeStages();saveSalesGrowthState();renderSalesGrowthStages();renderSalesGrowthSimulation()
+    salesGrowthSanitizeStages();saveSalesGrowthState();renderSalesGrowthStages();scheduleSalesGrowthSimulation()
   });
   $$('.sales-stage-remove').forEach(btn=>btn.onclick=()=>{
     const idx=Number(btn.closest('.sales-stage-row').dataset.index);
     state.salesGrowthSimulation.stages.splice(idx,1);
-    saveSalesGrowthState();renderSalesGrowthStages();renderSalesGrowthSimulation()
+    saveSalesGrowthState();renderSalesGrowthStages();scheduleSalesGrowthSimulation()
   })
 }
-function salesGrowthAddStage(useCheapest=false){
-  ensureSalesGrowthState();salesGrowthSanitizeStages();
-  const excluded=new Set([state.salesGrowthSimulation.sourceKey,...state.salesGrowthSimulation.stages]);
-  const target=useCheapest?salesGrowthCheapestTarget(excluded):salesGrowthBatches().find(b=>!excluded.has(b.key));
-  if(!target)return;
-  state.salesGrowthSimulation.stages.push(target.key);
-  saveSalesGrowthState();renderSalesGrowthStages();renderSalesGrowthSimulation()
+let salesGrowthRenderTimer=null;
+function scheduleSalesGrowthSimulation(){
+  const status=$('#salesSimActionStatus');
+  if(status)status.textContent='Berechnung läuft …';
+  if(salesGrowthRenderTimer)clearTimeout(salesGrowthRenderTimer);
+  salesGrowthRenderTimer=setTimeout(()=>{
+    try{
+      renderSalesGrowthSimulation();
+      if(status)status.textContent='✓ Berechnung aktualisiert'
+    }catch(err){
+      console.error('Verkaufs-Simulation berechnen:',err);
+      if(status)status.textContent='⚠ Berechnung konnte nicht abgeschlossen werden'
+    }
+  },30)
 }
+
+function salesGrowthAddStage(useCheapest=false){
+  ensureSalesGrowthState();
+  salesGrowthSanitizeStages();
+
+  const excluded=new Set([state.salesGrowthSimulation.sourceKey,...state.salesGrowthSimulation.stages]);
+  const target=useCheapest
+    ? salesGrowthCheapestTarget(excluded)
+    : salesGrowthBatches().find(b=>!excluded.has(b.key));
+
+  const status=$('#salesSimActionStatus');
+
+  if(!target){
+    if(status)status.textContent='⚠ Kein weiteres Batch verfügbar';
+    return false
+  }
+
+  state.salesGrowthSimulation.stages.push(target.key);
+  saveSalesGrowthState();
+
+  // Wichtig: die neue Stufe sofort anzeigen, bevor die aufwendige Simulation startet.
+  renderSalesGrowthStages();
+
+  if(status){
+    status.textContent=useCheapest
+      ? '✓ '+target.bid+' als günstigstes Ziel hinzugefügt'
+      : '✓ '+target.bid+' hinzugefügt'
+  }
+
+  scheduleSalesGrowthSimulation();
+  return true
+}
+window.salesGrowthAddStage=salesGrowthAddStage;
+
 function salesGrowthAddStock(stock,purchase){
   purchase.lines.forEach(x=>{
     if(x.missing)return;
@@ -535,8 +576,10 @@ function initSalesSimulation(){
     salesGrowthSanitizeStages();
     saveSalesGrowthState();
     renderSalesGrowthStages();
-    renderSalesGrowthSimulation()
+    scheduleSalesGrowthSimulation()
   };
   if(add)add.onclick=()=>salesGrowthAddStage(false);
   if(suggest)suggest.onclick=()=>salesGrowthAddStage(true)
 }
+window.initSalesSimulation=initSalesSimulation;
+
