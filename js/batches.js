@@ -9,15 +9,98 @@ function batchProductionPlan(b){
   const pg=new Map(),vg=new Map();
   (b.items||[]).forEach(i=>{if(i.pid)pg.set(i.pid,(pg.get(i.pid)||0)+Math.max(1,num(i.qty,1)))});
   (b.packagingItems||[]).forEach(i=>{if(i.vid)vg.set(i.vid,(vg.get(i.vid)||0)+Math.max(0.001,num(i.qty,1)))});
-  const productLines=[],packagingLines=[];let firstOrderCost=0,possible=Infinity,missing=false;
-  pg.forEach((qty,id)=>{const x=state.products.find(p=>p.pid===id),s=(x?.suppliers||[]).find(z=>z.preferred)||(x?.suppliers||[])[0];if(!x||!s){missing=true;productLines.push({id,name:x?.name||'Produkt fehlt',qty,available:0,orderCost:0,batches:0,missing:true});possible=0;return}const available=supplierQtyBase(s),orderCost=supplierOrderCost(s),count=Math.floor(available/qty);firstOrderCost+=orderCost;possible=Math.min(possible,count);productLines.push({id,name:x.name,qty,available,orderCost,batches:count,missing:false})});
-  vg.forEach((qty,id)=>{const x=state.packaging.find(v=>v.vid===id),s=preferredPackagingSupplier(x);if(!x||!s){missing=true;packagingLines.push({id,name:x?.name||'Verpackung fehlt',qty,available:0,orderCost:0,batches:0,missing:true});possible=0;return}const available=supplierQtyBase(s),orderCost=supplierOrderCost(s),count=Math.floor(available/qty);firstOrderCost+=orderCost;possible=Math.min(possible,count);packagingLines.push({id,name:x.name,qty,available,orderCost,batches:count,missing:false})});
-  const lines=[...productLines,...packagingLines];if(possible===Infinity)possible=0;const limiter=lines.filter(x=>x.batches===possible&&!x.missing);
-  return{productLines,packagingLines,lines,firstOrderCost,possible,limiter,totalInvestment:firstOrderCost,unitBatchCost:batchCalc(b).total,missing};
-}
-function productionLinesHtml(lines,label){if(!lines.length)return'';return`<div class="tiny" style="font-weight:800;margin:12px 0 5px">${esc(label)}</div><div class="production-lines"><div class="production-line head"><span>ID · Position</span><span>Bedarf/Batch</span><span>1. Bestellung</span><span>Reicht für</span></div>${lines.map(x=>`<div class="production-line"><span><b>${esc(x.id)}</b> · ${esc(x.name)}</span><span>${x.qty} Stk.</span><span>${x.missing?'–':x.available+' Stk. · '+euro(x.orderCost)}</span><span>${x.missing?'–':x.batches+' Batches'}</span></div>`).join('')}</div>`}
-function renderBatchProductionPlan(b){const el=$('#batchProductionContent');if(!el)return;const p=batchProductionPlan(b);if(!p.lines.length){el.innerHTML='<div class="assistant-empty" style="margin-top:10px">Füge Produkte oder Verpackungsmaterialien hinzu, um die Herstellungsplanung zu berechnen.</div>';return}const limiter=p.limiter.length?p.limiter.map(x=>esc(x.id+' · '+x.name)).join(', '):(p.missing?'Lieferantendaten fehlen':'–');el.innerHTML=`<div class="production-kpis"><div class="production-kpi"><div class="label">1. AK</div><div class="value">${euro(p.firstOrderCost)}</div></div><div class="production-kpi"><div class="label">Mögliche vollständige Batches</div><div class="value">${p.possible}</div></div><div class="production-kpi"><div class="label">Engpass</div><div class="value" style="font-size:12px">${limiter}</div></div><div class="production-kpi"><div class="label">Material-EK pro Batch</div><div class="value">${euro(p.unitBatchCost)}</div></div></div><div class="tiny" style="margin-top:7px">Die 1. AK berücksichtigt PIDs und VIDs jeweils mit MOQ bzw. Set, Versand und aktiviertem Zoll.${p.missing?' Für mindestens eine Position fehlen Lieferantendaten.':''}</div>${productionLinesHtml(p.productLines,'Produkte (PID)')}${productionLinesHtml(p.packagingLines,'Verpackung (VID)')}`}
 
+  const productLines=[],packagingLines=[];
+  let firstOrderCost=0,possible=Infinity,missing=false;
+
+  function addLine(kind,id,qty,x,s){
+    if(!x||!s){
+      missing=true;
+      const line={id,name:x?.name||(kind==='product'?'Produkt fehlt':'Verpackung fehlt'),qty,available:0,orderCost:0,batches:0,missing:true,unitLanded:0};
+      (kind==='product'?productLines:packagingLines).push(line);
+      possible=0; return
+    }
+    const available=supplierQtyBase(s),orderCost=supplierOrderCost(s),count=Math.floor(available/qty),
+      unitLanded=available>0?orderCost/available:0;
+    firstOrderCost+=orderCost;
+    possible=Math.min(possible,count);
+    (kind==='product'?productLines:packagingLines).push({id,name:x.name,qty,available,orderCost,batches:count,missing:false,unitLanded})
+  }
+
+  pg.forEach((qty,id)=>{const x=state.products.find(p=>p.pid===id),s=(x?.suppliers||[]).find(z=>z.preferred)||(x?.suppliers||[])[0];addLine('product',id,qty,x,s)});
+  vg.forEach((qty,id)=>{const x=state.packaging.find(v=>v.vid===id),s=preferredPackagingSupplier(x);addLine('packaging',id,qty,x,s)});
+
+  const lines=[...productLines,...packagingLines];
+  if(possible===Infinity)possible=0;
+  const limiter=lines.filter(x=>x.batches===possible&&!x.missing);
+
+  // Wert des nach Verkauf aller mit der 1. AK möglichen vollständigen Batches verbleibenden Lagerbestands.
+  let remainingInventoryValue=0;
+  lines.forEach(x=>{
+    if(x.missing)return;
+    const used=Math.min(x.available,possible*x.qty),
+      remaining=Math.max(0,x.available-used);
+    x.usedForPossible=used;
+    x.remainingAfterPossible=remaining;
+    x.remainingValue=remaining*x.unitLanded;
+    remainingInventoryValue+=x.remainingValue
+  });
+
+  // Wie viele Batches müssen insgesamt produziert/verkauft werden, bis jede Position aus der 1. AK
+  // mindestens einmal vollständig verbraucht wurde? Das ist die höchste "Reicht für"-Menge.
+  const maxSellThroughBatches=lines.length?Math.max(...lines.filter(x=>!x.missing).map(x=>Math.ceil(x.available/x.qty)),0):0;
+
+  // Zusätzlicher Kapitalbedarf, um alle anderen Positionen auf diese Batchzahl hochzubestellen.
+  // Bestellungen erfolgen in ganzen Basis-Bestellmengen (MOQ/Set/Verbrauchspackung).
+  let sellThroughTotalCapital=firstOrderCost,additionalCapitalToSellThrough=0;
+  lines.forEach(x=>{
+    if(x.missing)return;
+    const required=maxSellThroughBatches*x.qty,
+      extraNeeded=Math.max(0,required-x.available);
+    if(extraNeeded<=0){x.extraOrders=0;x.extraCapital=0;x.totalAvailableForSellThrough=x.available;return}
+    const packs=Math.ceil(extraNeeded/x.available),
+      extraCapital=packs*x.orderCost;
+    x.extraOrders=packs;
+    x.extraCapital=extraCapital;
+    x.totalAvailableForSellThrough=x.available+packs*x.available;
+    additionalCapitalToSellThrough+=extraCapital;
+    sellThroughTotalCapital+=extraCapital
+  });
+
+  return{
+    productLines,packagingLines,lines,firstOrderCost,possible,limiter,
+    totalInvestment:firstOrderCost,unitBatchCost:batchCalc(b).total,missing,
+    remainingInventoryValue,maxSellThroughBatches,additionalCapitalToSellThrough,sellThroughTotalCapital
+  };
+}
+function productionLinesHtml(lines,label){
+  if(!lines.length)return'';
+  return`<div class="tiny" style="font-weight:800;margin:12px 0 5px">${esc(label)}</div><div class="production-lines"><div class="production-line head"><span>ID · Position</span><span>Bedarf/Batch</span><span>1. Bestellung</span><span>Reicht für</span></div>${lines.map(x=>{
+    const isPack=String(x.id).startsWith('VID-'),
+      obj=isPack?state.packaging.find(v=>v.vid===x.id):null,
+      sup=isPack?preferredPackagingSupplier(obj):null,
+      unit=sup?.priceType==='consumable'?(sup.consumptionUnit||'Einheit'):'Stk.';
+    return `<div class="production-line"><span><b>${esc(x.id)}</b> · ${esc(x.name)}</span><span>${x.qty} ${esc(unit)}</span><span>${x.missing?'–':x.available+' '+esc(unit)+' · '+euro(x.orderCost)}</span><span>${x.missing?'–':x.batches+' Batches'}</span></div>`
+  }).join('')}</div>`
+}
+function renderBatchProductionPlan(b){
+  const el=$('#batchProductionContent');if(!el)return;
+  const p=batchProductionPlan(b);
+  if(!p.lines.length){el.innerHTML='<div class="assistant-empty" style="margin-top:10px">Füge Produkte oder Verpackungsmaterialien hinzu, um die Herstellungsplanung zu berechnen.</div>';return}
+  const limiter=p.limiter.length?p.limiter.map(x=>esc(x.id+' · '+x.name)).join(', '):(p.missing?'Lieferantendaten fehlen':'–');
+  el.innerHTML=`<div class="production-kpis">
+    <div class="production-kpi"><div class="label">Kapitalbedarf 1. Einkauf</div><div class="value">${euro(p.firstOrderCost)}</div></div>
+    <div class="production-kpi"><div class="label">Mögliche vollständige Batches</div><div class="value">${p.possible}</div></div>
+    <div class="production-kpi"><div class="label">Lagerbestand danach</div><div class="value">${euro(p.remainingInventoryValue)}</div></div>
+    <div class="production-kpi"><div class="label">Engpass</div><div class="value" style="font-size:12px">${limiter}</div></div>
+    <div class="production-kpi"><div class="label">Max. Sell-through-Ziel</div><div class="value">${p.maxSellThroughBatches} Batches</div></div>
+    <div class="production-kpi"><div class="label">Zusatzkapital bis dahin</div><div class="value">${euro(p.additionalCapitalToSellThrough)}</div></div>
+    <div class="production-kpi"><div class="label">Gesamtkapital bis alles der 1. AK verbraucht ist</div><div class="value">${euro(p.sellThroughTotalCapital)}</div></div>
+    <div class="production-kpi"><div class="label">Material-EK pro Batch</div><div class="value">${euro(p.unitBatchCost)}</div></div>
+  </div>
+  <div class="tiny" style="margin-top:7px">„Lagerbestand danach“ bewertet den Restbestand nach Verkauf der ${p.possible} mit der ersten Bestellung direkt möglichen Batches zu den tatsächlichen Einstandskosten. Das Sell-through-Ziel nimmt die Position, die aus der 1. Bestellung für die meisten Batches reicht, und rechnet alle anderen PIDs/VIDs in ganzen MOQ-/Set-/Packungsschritten bis zu dieser Batchzahl hoch. So siehst du, wie viel zusätzliches Kapital nötig wäre, um den durch die 1. AK aufgebauten Bestand vollständig durch Batch-Verkäufe abzubauen.${p.missing?' Für mindestens eine Position fehlen Lieferantendaten.':''}</div>
+  ${productionLinesHtml(p.productLines,'Produkte (PID)')}${productionLinesHtml(p.packagingLines,'Verpackung (VID)')}`
+}
 function renderBatches(){
   state.batches.forEach(b=>{
     b.items=sortBatchItemsByPid(b.items);
@@ -130,6 +213,12 @@ function collectBatchDraft(){
     useOffsite:$('#batchUseOffsite').checked,
     useCurrency:$('#batchUseCurrency').checked,
     useSetup:$('#batchUseSetup').checked,
+    laborMinutes:num($('#batchLaborMinutes')?.value),
+    hourlyRate:num($('#batchHourlyRate')?.value),
+    outboundShipping:num($('#batchOutboundShipping')?.value),
+    adCost:num($('#batchAdCost')?.value),
+    riskPct:num($('#batchRiskPct')?.value),
+    fixedAllocation:num($('#batchFixedAllocation')?.value),
     notes:$('#batchNotes').value.trim()
   }
 }
@@ -162,6 +251,12 @@ function liveBatchCalc(){
   $('#batchPackagingCostLive').textContent=euro(c.packagingCost);
   $('#batchTotalCost').textContent=euro(c.total);
   $('#batchFeesLive').textContent=euro(c.fees);
+  $('#batchDb1Live').textContent=euro(c.db1);
+  $('#batchLaborCostLive').textContent=euro(c.laborCost);
+  $('#batchOutboundShippingLive').textContent=euro(c.outboundShipping);
+  $('#batchRiskAdsLive').textContent=euro(c.adCost+c.riskCost);
+  $('#batchDb2Live').textContent=euro(c.db2);
+  $('#batchFixedAllocationLive').textContent=euro(c.fixedAllocation);
   $('#batchProfitLive').textContent=euro(c.profit);
   $('#batchMarginLive').textContent=pct(c.margin);
   $('#batchRecommended').textContent=euro(c.recommended);
@@ -178,7 +273,7 @@ function openBatch(key=null){
   if(dlg.open)dlg.close();
   $('#batchItemRows').innerHTML='';
   $('#batchPackagingRows').innerHTML='';
-  $('#batchKey').value=b?.key||'';$('#batchBid').value=b?.bid||'';$('#batchBidLabel').textContent=b?.bid||'BID wird beim Speichern vergeben';$('#batchModalTitle').textContent=b?'Batch bearbeiten':'Neuer Batch';$('#batchName').value=b?.name||'';$('#batchStatus').value=b?.status||'idea';renderBatchItemRows(b?.items||[]);renderBatchPackagingRows(b?.packagingItems||[]);$('#batchTargetMargin').value=b?.targetMargin??30;$('#batchSalePrice').value=b?.salePrice??0;$('#batchUseOffsite').checked=!!b?.useOffsite;$('#batchUseCurrency').checked=!!b?.useCurrency;$('#batchUseSetup').checked=!!b?.useSetup;$('#batchNotes').value=b?.notes||'';$('#deleteBatchBtn').classList.toggle('hidden',!b);
+  $('#batchKey').value=b?.key||'';$('#batchBid').value=b?.bid||'';$('#batchBidLabel').textContent=b?.bid||'BID wird beim Speichern vergeben';$('#batchModalTitle').textContent=b?'Batch bearbeiten':'Neuer Batch';$('#batchName').value=b?.name||'';$('#batchStatus').value=b?.status||'idea';renderBatchItemRows(b?.items||[]);renderBatchPackagingRows(b?.packagingItems||[]);$('#batchTargetMargin').value=b?.targetMargin??30;$('#batchSalePrice').value=b?.salePrice??0;$('#batchUseOffsite').checked=!!b?.useOffsite;$('#batchUseCurrency').checked=!!b?.useCurrency;$('#batchUseSetup').checked=!!b?.useSetup;$('#batchLaborMinutes').value=b?.laborMinutes??0;$('#batchHourlyRate').value=b?.hourlyRate??0;$('#batchOutboundShipping').value=b?.outboundShipping??0;$('#batchAdCost').value=b?.adCost??0;$('#batchRiskPct').value=b?.riskPct??0;$('#batchFixedAllocation').value=b?.fixedAllocation??0;$('#batchNotes').value=b?.notes||'';$('#deleteBatchBtn').classList.toggle('hidden',!b);
   liveBatchCalc();
   dlg.showModal();
   if(b&&typeof renderBatchAssistant==='function'){try{renderBatchAssistant(b)}catch(err){console.error('Batch-Assistent:',err)}}
