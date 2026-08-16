@@ -88,12 +88,37 @@
 .sales-sim-step .v{font-weight:800;margin-top:2px}
 @media(max-width:900px){.sales-sim-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.sales-sim-table{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:650px){.sales-sim-controls{grid-template-columns:1fr}.sales-sim-arrow{display:none}.sales-sim-kpis{grid-template-columns:1fr 1fr}}
+
+.sales-sim-start{display:grid;grid-template-columns:minmax(220px,320px) 1fr;gap:14px;align-items:end}
+.sales-sim-stages{display:grid;gap:8px}
+.sales-stage-row{display:grid;grid-template-columns:48px minmax(220px,1fr) 150px 42px;gap:8px;align-items:end;border:1px solid var(--line);border-radius:12px;padding:9px;background:#fff}
+.sales-stage-number{font-weight:850;color:var(--green);align-self:center;text-align:center}
+.sales-chain-summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:12px}
+.sales-chain-stage{border:1px solid var(--line);border-radius:14px;padding:13px;background:#fff;margin-top:10px}
+.sales-chain-stage.done{border-color:#b9d7c4;background:#fbfefc}
+.sales-chain-stage-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px}
+.sales-chain-stage-title{font-weight:850}
+.sales-chain-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.sales-purchase-list{display:grid;gap:4px;margin-top:8px}
+.sales-purchase-line{display:grid;grid-template-columns:110px 1fr auto auto;gap:8px;font-size:12px;padding:5px 0;border-bottom:1px solid var(--line)}
+.sales-purchase-line:last-child{border-bottom:0}
+.sales-reorder-list{display:grid;gap:4px;margin-top:6px;max-height:220px;overflow:auto}
+.sales-reorder-line{display:grid;grid-template-columns:90px 1fr auto;gap:8px;font-size:11px}
+.sales-active-counts{display:flex;gap:7px;flex-wrap:wrap;margin-top:7px}
+.sales-active-counts .badge{font-variant-numeric:tabular-nums}
+@media(max-width:900px){
+  .sales-sim-start{grid-template-columns:1fr}
+  .sales-stage-row{grid-template-columns:42px 1fr 42px}
+  .sales-stage-row .sales-stage-cost{grid-column:2}
+  .sales-chain-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .sales-chain-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
 </style>
 </head>
 <body>
 <div class="app">
 <header class="topbar">
-  <div class="brand"><div class="logo">B</div><div><h1>Batchies</h1><div class="subtitle">Produktentwicklung & Stammdaten · v3.0.0</div></div></div>
+  <div class="brand"><div class="logo">B</div><div><h1>Batchies</h1><div class="subtitle">Produktentwicklung & Stammdaten · v3.1.0</div></div></div>
   <div class="actions"><button class="btn" id="exportBackupBtn">Backup</button><button class="btn" id="importBackupBtn">Import</button><button class="btn primary" id="addProductBtn">+ Produkt</button><button class="btn primary" id="addBatchBtn">+ Batch</button><input type="file" id="backupFile" accept="application/json" hidden></div>
 </header>
 <nav class="tabs"><button class="tab active" data-tab="overview">Übersicht</button><button class="tab" data-tab="products">Produkte</button><button class="tab" data-tab="packaging">Verpackung</button><button class="tab" data-tab="batches">Batches</button><button class="tab" data-tab="fees">Gebühren & Kalkulation</button><button class="tab" data-tab="investments">Investitionen</button><button class="tab" data-tab="simulation">Einkaufs-Simulation</button><button class="tab" data-tab="data">Stammdaten & CSV</button></nav>
@@ -151,17 +176,27 @@
   <div class="card span12">
     <div class="toolbar">
       <div>
-        <h2 class="section-title" style="margin-bottom:2px">Verkaufs-Simulation</h2>
-        <div class="muted">Wie viele Verkäufe eines Start-Batches brauchst du, bis dessen kalkulatorischer Gewinn die 1. AK eines weiteren Batches finanzieren kann?</div>
+        <h2 class="section-title" style="margin-bottom:2px">Verkaufs- & Reinvestitions-Simulation</h2>
+        <div class="muted">Simuliert echte Cashflows: Startbestand kaufen → verkaufen → notwendige PID/VID-Nachbestellungen bezahlen → Start-Batch amortisieren → weitere Batches aus dem erwirtschafteten Geld finanzieren.</div>
       </div>
-      <button class="btn secondary" id="salesSimSuggestBtn" type="button">Günstigstes Ziel vorschlagen</button>
+      <div class="inline">
+        <button class="btn secondary" id="salesSimSuggestBtn" type="button">Günstigstes nächstes Batch</button>
+        <button class="btn" id="salesSimAddStageBtn" type="button">+ weiteres Ziel-Batch</button>
+      </div>
     </div>
-    <div class="sales-sim-controls">
+
+    <div class="sales-sim-start">
       <div class="field"><label>Start-Batch</label><select id="salesSimSource"></select></div>
-      <div class="sales-sim-arrow">→</div>
-      <div class="field"><label>Ziel-Batch</label><select id="salesSimTarget"></select></div>
+      <div class="info">Die Simulation startet mit der 1. AK dieses Batches. Material wird nicht pauschal pro Verkauf abgezogen, sondern erst dann als echter Geldabfluss, wenn eine PID-/VID-Nachbestellung in ihrer realen MOQ-/Set-/Packungsgröße nötig wird.</div>
     </div>
-    <div id="salesSimulationContent"></div>
+
+    <div class="toolbar compact" style="margin-top:14px;margin-bottom:8px">
+      <strong>Wachstumskette</strong>
+      <span class="tiny">Nach Freischaltung eines Batches verkaufen alle aktiven Batches reihum; dadurch siehst du Gesamtverkäufe und Verkäufe je Batch.</span>
+    </div>
+    <div id="salesSimStages" class="sales-sim-stages"></div>
+
+    <div id="salesSimulationContent" style="margin-top:14px"></div>
   </div>
 </div></section>
 <section id="tab-data" class="tabpage hidden"><div class="grid">

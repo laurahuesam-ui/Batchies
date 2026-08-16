@@ -254,113 +254,289 @@ function renderInventorySimulation(){
 }
 
 
-
-function salesSimBatchOptions(){
-  return (state.batches||[])
-    .slice()
-    .sort((a,b)=>String(a.bid).localeCompare(String(b.bid),'de',{numeric:true}))
+function ensureSalesGrowthState(){
+  if(!state.salesGrowthSimulation||typeof state.salesGrowthSimulation!=='object'){
+    state.salesGrowthSimulation={sourceKey:'',stages:[]}
+  }
+  if(!Array.isArray(state.salesGrowthSimulation.stages))state.salesGrowthSimulation.stages=[]
 }
-function salesSimTargetCost(b){
-  try{return batchProductionPlan(b).firstOrderCost}catch(err){return 0}
+function saveSalesGrowthState(){
+  try{localStorage.setItem(STORAGE_KEY,JSON.stringify(state))}catch(err){console.error('Verkaufs-Simulation speichern:',err)}
 }
-function salesSimProfitPerSale(b){
-  try{return batchCalc(b).profit}catch(err){return 0}
+function salesGrowthBatches(){
+  return (state.batches||[]).slice().sort((a,b)=>String(a.bid).localeCompare(String(b.bid),'de',{numeric:true}))
 }
-function salesSimCheapestTarget(sourceKey=null){
-  const candidates=salesSimBatchOptions()
-    .filter(b=>b.key!==sourceKey)
-    .map(b=>({b,cost:salesSimTargetCost(b)}))
-    .filter(x=>x.cost>0)
-    .sort((a,b)=>a.cost-b.cost||String(a.b.bid).localeCompare(String(b.b.bid),'de',{numeric:true}));
+function salesGrowthSupplier(kind,id){
+  if(kind==='PID'){
+    const x=state.products.find(p=>p.pid===id);
+    return{x,s:(x?.suppliers||[]).find(z=>z.preferred)||(x?.suppliers||[])[0]}
+  }
+  const x=state.packaging.find(v=>v.vid===id);
+  return{x,s:preferredPackagingSupplier(x)}
+}
+function salesGrowthBatchNeeds(b){
+  const needs=[];
+  (b.items||[]).forEach(i=>{if(i.pid)needs.push({kind:'PID',id:i.pid,qty:Math.max(1,num(i.qty,1))})});
+  (b.packagingItems||[]).forEach(i=>{if(i.vid)needs.push({kind:'VID',id:i.vid,qty:Math.max(.001,num(i.qty,1))})});
+  return needs
+}
+function salesGrowthOrderForNeed(kind,id,neededQty){
+  const {x,s}=salesGrowthSupplier(kind,id);
+  if(!x||!s)return{kind,id,name:x?.name||id,neededQty,baseQty:0,packs:0,orderedQty:0,cost:0,missing:true};
+  const baseQty=Math.max(.001,supplierQtyBase(s)),
+    packs=Math.max(1,Math.ceil(Math.max(.001,neededQty)/baseQty)),
+    orderedQty=packs*baseQty,
+    cost=packs*supplierOrderCost(s);
+  return{kind,id,name:x.name,neededQty,baseQty,packs,orderedQty,cost,missing:false}
+}
+function salesGrowthInitialPurchase(b){
+  const lines=salesGrowthBatchNeeds(b).map(n=>salesGrowthOrderForNeed(n.kind,n.id,n.qty));
+  return{lines,total:lines.reduce((a,x)=>a+x.cost,0),missing:lines.some(x=>x.missing)}
+}
+function salesGrowthNonMaterialCashPerSale(b){
+  const c=batchCalc(b);
+  // Actual cash-flow view:
+  // material is handled discretely via stock/reorders below.
+  // Sale contributes revenue minus platform fees and the other per-sale costs.
+  return c.revenue-c.fees-c.laborCost-c.outboundShipping-c.adCost-c.riskCost-c.fixedAllocation
+}
+function salesGrowthCheapestTarget(excludeKeys=new Set()){
+  const candidates=salesGrowthBatches()
+    .filter(b=>!excludeKeys.has(b.key))
+    .map(b=>({b,p:salesGrowthInitialPurchase(b)}))
+    .filter(x=>!x.p.missing&&x.p.total>0)
+    .sort((a,b)=>a.p.total-b.p.total||String(a.b.bid).localeCompare(String(b.b.bid),'de',{numeric:true}));
   return candidates[0]?.b||null
 }
-function salesSimPopulateSelects(){
-  const source=$('#salesSimSource'),target=$('#salesSimTarget');
-  if(!source||!target)return;
-  const batches=salesSimBatchOptions(),
-    oldSource=source.value,oldTarget=target.value;
-  source.innerHTML=batches.map(b=>`<option value="${esc(b.key)}">${esc(b.bid)} · ${esc(b.name)}</option>`).join('');
-  target.innerHTML=batches.map(b=>`<option value="${esc(b.key)}">${esc(b.bid)} · ${esc(b.name)}</option>`).join('');
-  if(batches.some(b=>b.key===oldSource))source.value=oldSource;
-  if(batches.some(b=>b.key===oldTarget))target.value=oldTarget;
-  if(!source.value&&batches[0])source.value=batches[0].key;
-  if(!target.value){
-    const cheapest=salesSimCheapestTarget(source.value);
-    if(cheapest)target.value=cheapest.key;
-  }
+function salesGrowthPopulateSource(){
+  ensureSalesGrowthState();
+  const el=$('#salesSimSource');if(!el)return;
+  const batches=salesGrowthBatches(),old=state.salesGrowthSimulation.sourceKey||el.value;
+  el.innerHTML=batches.map(b=>`<option value="${esc(b.key)}">${esc(b.bid)} · ${esc(b.name)}</option>`).join('');
+  if(batches.some(b=>b.key===old))el.value=old;
+  else if(batches[0])el.value=batches[0].key;
+  state.salesGrowthSimulation.sourceKey=el.value||''
 }
-function renderSalesSimulation(){
-  const el=$('#salesSimulationContent'),sourceSel=$('#salesSimSource'),targetSel=$('#salesSimTarget');
-  if(!el||!sourceSel||!targetSel)return;
+function salesGrowthSanitizeStages(){
+  ensureSalesGrowthState();
+  const source=state.salesGrowthSimulation.sourceKey;
+  const valid=new Set(state.batches.map(b=>b.key));
+  const seen=new Set(source?[source]:[]);
+  state.salesGrowthSimulation.stages=(state.salesGrowthSimulation.stages||[]).filter(k=>{
+    if(!valid.has(k)||seen.has(k))return false;
+    seen.add(k);return true
+  })
+}
+function renderSalesGrowthStages(){
+  const el=$('#salesSimStages');if(!el)return;
+  ensureSalesGrowthState();salesGrowthSanitizeStages();
+  const batches=salesGrowthBatches(),
+    usedBefore=new Set([state.salesGrowthSimulation.sourceKey]);
 
-  salesSimPopulateSelects();
-
-  const source=state.batches.find(b=>b.key===sourceSel.value),
-    target=state.batches.find(b=>b.key===targetSel.value);
-
-  if(!source||!target){
-    el.innerHTML='<div class="empty"><strong>Noch nicht genug Batches</strong>Lege mindestens zwei Batches an, um die Verkaufs-Simulation zu nutzen.</div>';
+  if(!state.salesGrowthSimulation.stages.length){
+    el.innerHTML='<div class="assistant-empty">Noch kein weiteres Ziel-Batch. Mit „+ weiteres Ziel-Batch“ kannst du die Reinvestitionskette beliebig erweitern.</div>';
     return
   }
 
-  const profit=salesSimProfitPerSale(source),
-    targetCost=salesSimTargetCost(target);
+  el.innerHTML=state.salesGrowthSimulation.stages.map((key,idx)=>{
+    const options=batches.filter(b=>!usedBefore.has(b.key)||b.key===key);
+    const current=state.batches.find(b=>b.key===key);
+    usedBefore.add(key);
+    const cost=current?salesGrowthInitialPurchase(current).total:0;
+    return `<div class="sales-stage-row" data-index="${idx}">
+      <div class="sales-stage-number">${idx+1}.</div>
+      <div class="field" style="margin:0"><label>Ziel-Batch</label><select class="sales-stage-select">${options.map(b=>`<option value="${esc(b.key)}" ${b.key===key?'selected':''}>${esc(b.bid)} · ${esc(b.name)}</option>`).join('')}</select></div>
+      <div class="sales-stage-cost"><div class="kpi-label">1. AK</div><div class="money">${euro(cost)}</div></div>
+      <button type="button" class="iconbtn sales-stage-remove" title="Ziel entfernen">✕</button>
+    </div>`
+  }).join('');
 
-  if(profit<=0){
-    el.innerHTML=`<div class="hint"><strong>${esc(source.bid)} · ${esc(source.name)}</strong> hat aktuell keinen positiven kalkulatorischen Gewinn. Mit diesem Batch kann deshalb kein weiteres Batch nachhaltig finanziert werden.</div>`;
-    return
+  $$('.sales-stage-select').forEach(sel=>sel.onchange=()=>{
+    const row=sel.closest('.sales-stage-row'),idx=Number(row.dataset.index);
+    state.salesGrowthSimulation.stages[idx]=sel.value;
+    salesGrowthSanitizeStages();saveSalesGrowthState();renderSalesGrowthStages();renderSalesGrowthSimulation()
+  });
+  $$('.sales-stage-remove').forEach(btn=>btn.onclick=()=>{
+    const idx=Number(btn.closest('.sales-stage-row').dataset.index);
+    state.salesGrowthSimulation.stages.splice(idx,1);
+    saveSalesGrowthState();renderSalesGrowthStages();renderSalesGrowthSimulation()
+  })
+}
+function salesGrowthAddStage(useCheapest=false){
+  ensureSalesGrowthState();salesGrowthSanitizeStages();
+  const excluded=new Set([state.salesGrowthSimulation.sourceKey,...state.salesGrowthSimulation.stages]);
+  const target=useCheapest?salesGrowthCheapestTarget(excluded):salesGrowthBatches().find(b=>!excluded.has(b.key));
+  if(!target)return;
+  state.salesGrowthSimulation.stages.push(target.key);
+  saveSalesGrowthState();renderSalesGrowthStages();renderSalesGrowthSimulation()
+}
+function salesGrowthAddStock(stock,purchase){
+  purchase.lines.forEach(x=>{
+    if(x.missing)return;
+    stock[x.id]=(stock[x.id]||0)+x.orderedQty
+  })
+}
+function salesGrowthEnsureForSale(b,stock,cash,reorders,saleNumber){
+  for(const need of salesGrowthBatchNeeds(b)){
+    const have=Math.max(0,num(stock[need.id]));
+    if(have+1e-9>=need.qty)continue;
+    const short=need.qty-have,
+      order=salesGrowthOrderForNeed(need.kind,need.id,short);
+    if(order.missing)return{ok:false,cash};
+    cash-=order.cost;
+    stock[need.id]=have+order.orderedQty;
+    reorders.push({saleNumber,bid:b.bid,...order})
   }
-  if(targetCost<=0){
-    el.innerHTML=`<div class="hint">Für <strong>${esc(target.bid)} · ${esc(target.name)}</strong> kann aktuell kein gültiger Kapitalbedarf der 1. AK berechnet werden.</div>`;
-    return
+  return{ok:true,cash}
+}
+function salesGrowthConsumeSale(b,stock){
+  salesGrowthBatchNeeds(b).forEach(n=>stock[n.id]=Math.max(0,num(stock[n.id])-n.qty))
+}
+function salesGrowthStagePurchaseListHtml(purchase){
+  if(!purchase?.lines?.length)return'<div class="tiny">Keine Positionen.</div>';
+  return `<div class="sales-purchase-list">${purchase.lines.map(x=>`<div class="sales-purchase-line">
+    <span><b>${esc(x.id)}</b></span>
+    <span>${esc(x.name)}</span>
+    <span>${x.missing?'kein Lieferant':x.orderedQty+' bestellt'}</span>
+    <strong>${x.missing?'–':euro(x.cost)}</strong>
+  </div>`).join('')}</div>`
+}
+function renderSalesGrowthSimulation(){
+  const el=$('#salesSimulationContent');if(!el)return;
+  ensureSalesGrowthState();salesGrowthSanitizeStages();
+
+  const source=state.batches.find(b=>b.key===state.salesGrowthSimulation.sourceKey);
+  if(!source){
+    el.innerHTML='<div class="empty"><strong>Kein Start-Batch</strong>Wähle zuerst ein Start-Batch.</div>';return
   }
 
-  const salesNeeded=Math.max(1,Math.ceil(targetCost/profit)),
-    exactSales=targetCost/profit,
-    accumulated=salesNeeded*profit,
-    surplus=accumulated-targetCost,
-    prev=Math.max(0,(salesNeeded-1)*profit),
-    progressBefore=Math.min(100,prev/targetCost*100),
-    cheapest=salesSimCheapestTarget(source.key),
-    isCheapest=cheapest?.key===target.key,
-    steps=[1,5,10,25,50,100];
+  const sourcePurchase=salesGrowthInitialPurchase(source);
+  if(sourcePurchase.missing||sourcePurchase.total<=0){
+    el.innerHTML=`<div class="hint">Für ${esc(source.bid)} · ${esc(source.name)} fehlen Lieferantendaten für eine vollständige 1. AK.</div>`;return
+  }
 
-  el.innerHTML=`<div class="sales-sim-kpis">
-    <div class="production-kpi"><div class="label">Gewinn je Verkauf</div><div class="value">${euro(profit)}</div></div>
-    <div class="production-kpi"><div class="label">1. AK Ziel-Batch</div><div class="value">${euro(targetCost)}</div></div>
-    <div class="production-kpi"><div class="label">Benötigte Verkäufe</div><div class="value">${salesNeeded}</div></div>
-    <div class="production-kpi"><div class="label">Gewinn dann angesammelt</div><div class="value">${euro(accumulated)}</div></div>
-    <div class="production-kpi"><div class="label">Überschuss danach</div><div class="value">${euro(surplus)}</div></div>
+  const stageBatches=state.salesGrowthSimulation.stages.map(k=>state.batches.find(b=>b.key===k)).filter(Boolean),
+    active=[source],stock={},counts=new Map([[source.key,0]]),reorders=[];
+
+  // Start cash is negative initial investment; stock exists after purchase.
+  let cash=-sourcePurchase.total,totalSales=0,rr=0,sourceBreakEvenAt=null;
+  salesGrowthAddStock(stock,sourcePurchase);
+
+  const stageResults=[];
+  const MAX_SALES=100000;
+
+  function oneSale(){
+    if(totalSales>=MAX_SALES)return false;
+    const b=active[rr%active.length];rr++;
+    const ensure=salesGrowthEnsureForSale(b,stock,cash,reorders,totalSales+1);
+    if(!ensure.ok)return false;
+    cash=ensure.cash;
+    salesGrowthConsumeSale(b,stock);
+    cash+=salesGrowthNonMaterialCashPerSale(b);
+    totalSales++;
+    counts.set(b.key,(counts.get(b.key)||0)+1);
+    if(sourceBreakEvenAt===null&&cash>=0)sourceBreakEvenAt={totalSales,counts:Object.fromEntries(counts),cash};
+    return true
+  }
+
+  // First, amortize source business.
+  while(cash<0&&totalSales<MAX_SALES){
+    if(!oneSale())break
+  }
+
+  // Then finance each target. Target 1. AK is paid from available free cash.
+  for(const target of stageBatches){
+    const purchase=salesGrowthInitialPurchase(target);
+    const stageStartSales=totalSales,stageStartCash=cash,
+      reorderStart=reorders.length;
+
+    while(cash+1e-9<purchase.total&&totalSales<MAX_SALES){
+      if(!oneSale())break
+    }
+
+    const funded=cash+1e-9>=purchase.total&&!purchase.missing;
+    if(funded){
+      cash-=purchase.total;
+      salesGrowthAddStock(stock,purchase);
+      active.push(target);
+      counts.set(target.key,counts.get(target.key)||0);
+      // round-robin resets naturally into enlarged active list
+    }
+
+    stageResults.push({
+      target,purchase,funded,
+      salesDuringStage:totalSales-stageStartSales,
+      totalSales,
+      cashBeforePurchase:funded?cash+purchase.total:cash,
+      cashAfterPurchase:cash,
+      counts:Object.fromEntries(counts),
+      reorders:reorders.slice(reorderStart)
+    });
+    if(!funded)break
+  }
+
+  const cashPerSaleSource=salesGrowthNonMaterialCashPerSale(source);
+
+  el.innerHTML=`<div class="sales-chain-summary">
+    <div class="production-kpi"><div class="label">Start-Investition</div><div class="value">${euro(sourcePurchase.total)}</div></div>
+    <div class="production-kpi"><div class="label">Start-Batch amortisiert</div><div class="value">${sourceBreakEvenAt?sourceBreakEvenAt.totalSales+' Verkäufe':'nicht erreicht'}</div></div>
+    <div class="production-kpi"><div class="label">Gesamtverkäufe simuliert</div><div class="value">${totalSales}</div></div>
+    <div class="production-kpi"><div class="label">Freies Geld am Ende</div><div class="value">${euro(cash)}</div></div>
+    <div class="production-kpi"><div class="label">Nachbestellungen</div><div class="value">${reorders.length}</div></div>
   </div>
-  <div class="info">
-    Mit <strong>${esc(source.bid)} · ${esc(source.name)}</strong> brauchst du bei aktuell <strong>${euro(profit)} kalkulatorischem Gewinn pro Verkauf</strong>
-    <strong>${salesNeeded} Verkäufe</strong>, um die <strong>${euro(targetCost)}</strong> der 1. AK von
-    <strong>${esc(target.bid)} · ${esc(target.name)}</strong> zu finanzieren.
-    ${isCheapest?'<strong>Dieses Ziel ist aktuell das günstigste weitere Batch.</strong>':cheapest?`Das günstigste weitere Ziel wäre aktuell <strong>${esc(cheapest.bid)} · ${esc(cheapest.name)}</strong> mit ${euro(salesSimTargetCost(cheapest))} 1. AK.`:''}
+
+  <div class="sales-chain-stage done">
+    <div class="sales-chain-stage-head"><div><div class="sales-chain-stage-title">Start · ${esc(source.bid)} · ${esc(source.name)}</div><div class="tiny">1. AK und Amortisation</div></div><span class="badge ready">${sourceBreakEvenAt?'amortisiert':'offen'}</span></div>
+    <div class="sales-chain-kpis">
+      <div><div class="kpi-label">1. AK</div><strong>${euro(sourcePurchase.total)}</strong></div>
+      <div><div class="kpi-label">Cash je Verkauf vor Material-Nachkauf</div><strong>${euro(cashPerSaleSource)}</strong></div>
+      <div><div class="kpi-label">Break-even nach</div><strong>${sourceBreakEvenAt?sourceBreakEvenAt.totalSales+' Verkäufen':'–'}</strong></div>
+      <div><div class="kpi-label">B19-Verkäufe bis Break-even</div><strong>${sourceBreakEvenAt?(sourceBreakEvenAt.counts[source.key]||0):'–'}</strong></div>
+    </div>
+    <details><summary>Was wurde für die 1. AK gekauft?</summary>${salesGrowthStagePurchaseListHtml(sourcePurchase)}</details>
   </div>
-  <div style="margin-top:12px">
-    <div class="tiny">Nach ${Math.max(0,salesNeeded-1)} Verkäufen: ${euro(prev)} von ${euro(targetCost)} finanziert (${progressBefore.toFixed(1).replace('.',',')} %)</div>
-    <div class="sales-sim-progress"><div style="width:${progressBefore}%"></div></div>
-    <div class="tiny">Der nächste Verkauf überschreitet die benötigte Summe um ${euro(surplus)}.</div>
-  </div>
-  <div class="toolbar compact" style="margin-top:14px;margin-bottom:6px"><strong>Gewinnaufbau</strong><span class="tiny">wenn ausschließlich der kalkulatorische Gewinn reinvestiert wird</span></div>
-  <div class="sales-sim-table">${steps.map(n=>`<div class="sales-sim-step"><div class="n">${n} Verkauf${n===1?'':'e'}</div><div class="v">${euro(n*profit)}</div><div class="tiny">${n*profit>=targetCost?'✓ Ziel finanziert':euro(Math.max(0,targetCost-n*profit))+' fehlen'}</div></div>`).join('')}</div>`;
+
+  ${stageResults.map((r,idx)=>{
+    const activeCounts=Object.entries(r.counts).map(([key,n])=>{
+      const b=state.batches.find(x=>x.key===key);return b?`<span class="badge">${esc(b.bid)}: ${n}</span>`:''
+    }).join('');
+    return `<div class="sales-chain-stage ${r.funded?'done':''}">
+      <div class="sales-chain-stage-head">
+        <div><div class="sales-chain-stage-title">Stufe ${idx+1} · ${esc(r.target.bid)} · ${esc(r.target.name)}</div><div class="tiny">Finanziert durch alle bis dahin aktiven Batches</div></div>
+        <span class="badge ${r.funded?'ready':''}">${r.funded?'✓ finanziert':'noch nicht finanziert'}</span>
+      </div>
+      <div class="sales-chain-kpis">
+        <div><div class="kpi-label">1. AK Ziel</div><strong>${euro(r.purchase.total)}</strong></div>
+        <div><div class="kpi-label">Zusätzliche Verkäufe bis Ziel</div><strong>${r.salesDuringStage}</strong></div>
+        <div><div class="kpi-label">Gesamtverkäufe bis Ziel</div><strong>${r.totalSales}</strong></div>
+        <div><div class="kpi-label">Freies Geld nach Kauf</div><strong>${euro(r.cashAfterPurchase)}</strong></div>
+      </div>
+      <div class="sales-active-counts">${activeCounts}</div>
+      <details open><summary>Was muss für ${esc(r.target.bid)} gekauft werden?</summary>${salesGrowthStagePurchaseListHtml(r.purchase)}</details>
+      <details><summary>Nachbestellungen während dieser Stufe (${r.reorders.length})</summary>
+        ${r.reorders.length?`<div class="sales-reorder-list">${r.reorders.map(x=>`<div class="sales-reorder-line"><span>Verkauf ${x.saleNumber}</span><span>${esc(x.id)} · ${esc(x.name)} · ${x.orderedQty} nachbestellt</span><strong>${euro(x.cost)}</strong></div>`).join('')}</div>`:'<div class="tiny">Keine Nachbestellungen nötig.</div>'}
+      </details>
+    </div>`
+  }).join('')}
+
+  <div class="tiny" style="margin-top:10px">Modellannahme: Sobald mehrere Batches aktiv sind, werden sie reihum verkauft. Dadurch erhältst du eine neutrale gemeinsame Wachstumssimulation. Materialkosten werden als echte Bestellungen verbucht, nicht als geglätteter EK pro Verkauf; Arbeitszeit, Etsy-Gebühren, Werbung/Risiko, Kundenversand und Fixkosten-Umlage werden pro Verkauf berücksichtigt.</div>`
 }
 function initSalesSimulation(){
-  const source=$('#salesSimSource'),target=$('#salesSimTarget'),suggest=$('#salesSimSuggestBtn');
-  if(!source||!target)return;
-  salesSimPopulateSelects();
+  const source=$('#salesSimSource'),add=$('#salesSimAddStageBtn'),suggest=$('#salesSimSuggestBtn');
+  if(!source)return;
+  ensureSalesGrowthState();
+  salesGrowthPopulateSource();
+  salesGrowthSanitizeStages();
+  renderSalesGrowthStages();
+  renderSalesGrowthSimulation();
+
   source.onchange=()=>{
-    if(source.value===target.value){
-      const cheapest=salesSimCheapestTarget(source.value);
-      if(cheapest)target.value=cheapest.key
-    }
-    renderSalesSimulation()
+    state.salesGrowthSimulation.sourceKey=source.value;
+    salesGrowthSanitizeStages();
+    saveSalesGrowthState();
+    renderSalesGrowthStages();
+    renderSalesGrowthSimulation()
   };
-  target.onchange=renderSalesSimulation;
-  if(suggest)suggest.onclick=()=>{
-    const cheapest=salesSimCheapestTarget(source.value);
-    if(cheapest){target.value=cheapest.key;renderSalesSimulation()}
-  };
-  renderSalesSimulation()
+  if(add)add.onclick=()=>salesGrowthAddStage(false);
+  if(suggest)suggest.onclick=()=>salesGrowthAddStage(true)
 }
