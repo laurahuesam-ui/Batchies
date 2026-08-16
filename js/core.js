@@ -74,7 +74,7 @@ s.packaging.forEach((v,i)=>{
       setPrice:priceType==='set'?setPrice:0,setQty:priceType==='set'?setQty:1,
       purchasePrice:num(x.purchasePrice),packageCount:Math.max(1,num(x.packageCount,1)),
       amountPerPackage:Math.max(0.0001,num(x.amountPerPackage,1)),consumptionUnit:x.consumptionUnit||'m',
-      totalShipping:num(x.totalShipping),imageUrl:x.imageUrl||'',customs:!!x.customs,preferred:!!x.preferred}
+      totalShipping:num(x.totalShipping),imageUrl:x.imageUrl||'',customs:!!x.customs,preferred:!!x.preferred,priceTiers:Array.isArray(x.priceTiers)?x.priceTiers:[],shippingPoints:Array.isArray(x.shippingPoints)?x.shippingPoints:[]}
   });
   if(v.suppliers.length&&!v.suppliers.some(x=>x.preferred))v.suppliers[0].preferred=true;
   v.notes=String(v.notes||'');
