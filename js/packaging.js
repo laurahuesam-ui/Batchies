@@ -69,19 +69,39 @@ function packagingPreferredSupplierFromDraft(){const a=collectPackagingSuppliers
 
 function packagingPriceTierRowHtml(t={}){
   const type=t.priceType==='set'?'set':'unit',
-    setQty=Math.max(1,num(t.setQty,1)),
+    setQty=Math.max(1,num(t.setQty,num(t.minQty,1))),
     setPrice=num(t.setPrice),
-    unit=type==='set'?(setPrice/setQty):num(t.unitPrice);
-  return `<div class="packaging-price-tier-row">
-    <div class="pack-tier-field"><span class="supplier-mini-label">Ab Menge</span><input class="pack-tier-min" type="number" min="1" step="1" value="${Math.max(1,num(t.minQty,1))}" placeholder="z. B. 10"></div>
-    <div class="pack-tier-field"><span class="supplier-mini-label">Bis Menge</span><input class="pack-tier-max" type="number" min="1" step="1" value="${num(t.maxQty)||''}" placeholder="leer = offen"></div>
-    <div class="pack-tier-field pack-tier-type-field"><span class="supplier-mini-label">Preisart</span><select class="pack-tier-price-type">
-      <option value="unit" ${type==='unit'?'selected':''}>Stückpreis</option>
-      <option value="set" ${type==='set'?'selected':''}>Setpreis</option>
-    </select></div>
-    <div class="pack-tier-field"><span class="supplier-mini-label pack-tier-price-label">${type==='set'?'Setpreis':'Stückpreis'}</span><input class="pack-tier-price" type="number" min="0" step="0.0001" value="${type==='set'?(setPrice||''):(num(t.unitPrice)||'')}" placeholder="${type==='set'?'z. B. 15,99':'€/Stück'}"></div>
-    <div class="pack-tier-field pack-tier-set-field ${type==='set'?'':'muted-tier-field'}"><span class="supplier-mini-label">Stück im Set</span><input class="pack-tier-set-qty" type="number" min="1" step="1" value="${setQty}" placeholder="z. B. 10" ${type==='set'?'':'disabled'}></div>
-    <div class="pack-tier-field"><span class="supplier-mini-label">Preis/Stück</span><input class="pack-tier-unit-display" type="text" value="${unit?euro(unit):'–'}" readonly title="Effektiver Preis/Stück dieser Staffel"></div>
+    unit=type==='set'?(setPrice/setQty):num(t.unitPrice),
+    minQty=Math.max(1,num(t.minQty,1)),
+    maxQty=num(t.maxQty)||'';
+  return `<div class="packaging-price-tier-row ${type==='set'?'set-tier-row':'unit-tier-row'}">
+    <div class="pack-tier-field pack-tier-range-field ${type==='set'?'hidden':''}">
+      <span class="supplier-mini-label">Ab Menge</span>
+      <input class="pack-tier-min" type="number" min="1" step="1" value="${minQty}" placeholder="z. B. 10">
+    </div>
+    <div class="pack-tier-field pack-tier-range-field ${type==='set'?'hidden':''}">
+      <span class="supplier-mini-label">Bis Menge</span>
+      <input class="pack-tier-max" type="number" min="1" step="1" value="${maxQty}" placeholder="leer = offen">
+    </div>
+    <div class="pack-tier-field pack-tier-type-field">
+      <span class="supplier-mini-label">Preisart</span>
+      <select class="pack-tier-price-type">
+        <option value="unit" ${type==='unit'?'selected':''}>Stückpreis</option>
+        <option value="set" ${type==='set'?'selected':''}>Setpreis</option>
+      </select>
+    </div>
+    <div class="pack-tier-field">
+      <span class="supplier-mini-label pack-tier-price-label">${type==='set'?'Setpreis':'Stückpreis'}</span>
+      <input class="pack-tier-price" type="number" min="0" step="0.0001" value="${type==='set'?(setPrice||''):(num(t.unitPrice)||'')}" placeholder="${type==='set'?'z. B. 15,99':'€/Stück'}">
+    </div>
+    <div class="pack-tier-field pack-tier-set-field ${type==='set'?'':'hidden'}">
+      <span class="supplier-mini-label">Stück im Set</span>
+      <input class="pack-tier-set-qty" type="number" min="1" step="1" value="${setQty}" placeholder="z. B. 10">
+    </div>
+    <div class="pack-tier-field">
+      <span class="supplier-mini-label">Preis/Stück</span>
+      <input class="pack-tier-unit-display" type="text" value="${unit?euro(unit):'–'}" readonly title="Effektiver Preis/Stück dieser Staffel">
+    </div>
     <div class="pack-tier-remove"><span class="supplier-mini-label">&nbsp;</span><button type="button" class="iconbtn remove-packaging-price-tier">✕</button></div>
   </div>`
 }
@@ -92,15 +112,24 @@ function collectPackagingPriceTiers(r){
   return [...r.querySelectorAll('.packaging-price-tier-row')].map(x=>{
     const priceType=x.querySelector('.pack-tier-price-type')?.value==='set'?'set':'unit',
       rawPrice=num(x.querySelector('.pack-tier-price')?.value),
-      setQty=Math.max(1,num(x.querySelector('.pack-tier-set-qty')?.value,1)),
-      unitPrice=priceType==='set'?rawPrice/setQty:rawPrice;
+      setQty=Math.max(1,num(x.querySelector('.pack-tier-set-qty')?.value,1));
+    if(priceType==='set'){
+      return {
+        minQty:setQty,
+        maxQty:setQty,
+        priceType:'set',
+        unitPrice:rawPrice/setQty,
+        setPrice:rawPrice,
+        setQty
+      }
+    }
     return {
       minQty:Math.max(1,num(x.querySelector('.pack-tier-min')?.value,1)),
       maxQty:num(x.querySelector('.pack-tier-max')?.value)||null,
-      priceType,
-      unitPrice,
-      setPrice:priceType==='set'?rawPrice:0,
-      setQty:priceType==='set'?setQty:1
+      priceType:'unit',
+      unitPrice:rawPrice,
+      setPrice:0,
+      setQty:1
     }
   }).filter(x=>x.unitPrice>0).sort((a,b)=>a.minQty-b.minQty)
 }
@@ -176,9 +205,13 @@ function updatePackagingTierUnitDisplays(r){
       qtyInput=row.querySelector('.pack-tier-set-qty'),
       priceInput=row.querySelector('.pack-tier-price'),
       out=row.querySelector('.pack-tier-unit-display');
-    if(qtyInput)qtyInput.disabled=type!=='set';
     const setField=row.querySelector('.pack-tier-set-field');
-    if(setField)setField.classList.toggle('muted-tier-field',type!=='set');
+    const rangeFields=row.querySelectorAll('.pack-tier-range-field');
+    if(setField)setField.classList.toggle('hidden',type!=='set');
+    rangeFields.forEach(f=>f.classList.toggle('hidden',type==='set'));
+    if(qtyInput)qtyInput.disabled=false;
+    row.classList.toggle('set-tier-row',type==='set');
+    row.classList.toggle('unit-tier-row',type!=='set');
     const label=row.querySelector('.pack-tier-price-label');
     if(label)label.textContent=type==='set'?'Setpreis':'Stückpreis';
     if(priceInput)priceInput.placeholder=type==='set'?'z. B. 15,99':'€/Stück';
