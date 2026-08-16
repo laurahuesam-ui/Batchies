@@ -32,7 +32,7 @@ function packagingSupplierRowHtml(s){
     </div>
     <div class="packaging-tier-panel hidden">
       <div class="packaging-tier-section">
-        <div class="toolbar compact"><strong>Preisstaffeln</strong><button type="button" class="btn small add-packaging-price-tier">+ Preisstaffel</button></div>
+        <div class="toolbar compact packaging-tier-toolbar"><strong>Preisstaffeln</strong><label class="packaging-tier-type-wrap"><span>Preisart</span><select class="packaging-tier-type"><option value="unit">Stückpreis</option><option value="set">Setpreis</option></select></label><button type="button" class="btn small add-packaging-price-tier">+ Preisstaffel</button></div>
         <div class="packaging-price-tiers"></div>
         <div class="tiny">Preisstaffeln dieses Verpackungs-Lieferanten.</div>
       </div>
@@ -67,14 +67,14 @@ function packagingSupplierFromRow(r,i){
 function collectPackagingSuppliers(){return $$('.packaging-supplier-row').map(packagingSupplierFromRow)}
 function packagingPreferredSupplierFromDraft(){const a=collectPackagingSuppliers();return a.find(x=>x.preferred)||a[0]}
 
-function packagingPriceTierRowHtml(t={}){
-  const type=t.priceType==='set'?'set':'unit',
+function packagingPriceTierRowHtml(t={},forcedType=null){
+  const type=forcedType||(t.priceType==='set'?'set':'unit'),
     setQty=Math.max(1,num(t.setQty,num(t.minQty,1))),
     setPrice=num(t.setPrice),
     unit=type==='set'?(setPrice/setQty):num(t.unitPrice),
     minQty=Math.max(1,num(t.minQty,1)),
     maxQty=num(t.maxQty)||'';
-  return `<div class="packaging-price-tier-row ${type==='set'?'set-tier-row':'unit-tier-row'}">
+  return `<div class="packaging-price-tier-row ${type==='set'?'set-tier-row':'unit-tier-row'}" data-price-type="${type}">
     <div class="pack-tier-field pack-tier-range-field ${type==='set'?'hidden':''}">
       <span class="supplier-mini-label">Ab Menge</span>
       <input class="pack-tier-min" type="number" min="1" step="1" value="${minQty}" placeholder="z. B. 10">
@@ -82,13 +82,6 @@ function packagingPriceTierRowHtml(t={}){
     <div class="pack-tier-field pack-tier-range-field ${type==='set'?'hidden':''}">
       <span class="supplier-mini-label">Bis Menge</span>
       <input class="pack-tier-max" type="number" min="1" step="1" value="${maxQty}" placeholder="leer = offen">
-    </div>
-    <div class="pack-tier-field pack-tier-type-field">
-      <span class="supplier-mini-label">Preisart</span>
-      <select class="pack-tier-price-type">
-        <option value="unit" ${type==='unit'?'selected':''}>Stückpreis</option>
-        <option value="set" ${type==='set'?'selected':''}>Setpreis</option>
-      </select>
     </div>
     <div class="pack-tier-field">
       <span class="supplier-mini-label pack-tier-price-label">${type==='set'?'Setpreis':'Stückpreis'}</span>
@@ -109,27 +102,18 @@ function packagingShippingPointRowHtml(s={}){
   return `<div class="packaging-shipping-point-row"><input class="pack-ship-qty" type="number" min="1" step="1" value="${Math.max(1,num(s.qty,1))}" placeholder="Menge"><input class="pack-ship-normal" type="number" min="0" step="0.01" value="${num(s.shipping)||''}" placeholder="Versand"><input class="pack-ship-customs" type="number" min="0" step="0.01" value="${num(s.shippingWithCustoms)||''}" placeholder="Versand inkl. Zollabwicklung"><input class="pack-ship-unit-display" type="text" value="–" readonly title="Effektiver Preis/Stück bei dieser Menge"><button type="button" class="iconbtn remove-packaging-shipping-point">✕</button></div>`
 }
 function collectPackagingPriceTiers(r){
+  const globalType=r.querySelector('.packaging-tier-type')?.value==='set'?'set':'unit';
   return [...r.querySelectorAll('.packaging-price-tier-row')].map(x=>{
-    const priceType=x.querySelector('.pack-tier-price-type')?.value==='set'?'set':'unit',
+    const priceType=globalType,
       rawPrice=num(x.querySelector('.pack-tier-price')?.value),
       setQty=Math.max(1,num(x.querySelector('.pack-tier-set-qty')?.value,1));
     if(priceType==='set'){
-      return {
-        minQty:setQty,
-        maxQty:setQty,
-        priceType:'set',
-        unitPrice:rawPrice/setQty,
-        setPrice:rawPrice,
-        setQty
-      }
+      return {minQty:setQty,maxQty:setQty,priceType:'set',unitPrice:rawPrice/setQty,setPrice:rawPrice,setQty}
     }
     return {
       minQty:Math.max(1,num(x.querySelector('.pack-tier-min')?.value,1)),
       maxQty:num(x.querySelector('.pack-tier-max')?.value)||null,
-      priceType:'unit',
-      unitPrice:rawPrice,
-      setPrice:0,
-      setQty:1
+      priceType:'unit',unitPrice:rawPrice,setPrice:0,setQty:1
     }
   }).filter(x=>x.unitPrice>0).sort((a,b)=>a.minQty-b.minQty)
 }
@@ -147,9 +131,13 @@ function updatePackagingTierSummary(r){
   if(el)el.textContent=(pc?pc+' Preisstaffel'+(pc===1?'':'n'):'keine Preisstaffeln')+' · '+(sc?sc+' Versandpunkt'+(sc===1?'':'e'):'keine Versandpunkte')
 }
 function renderPackagingTierData(r,s={}){
-  r.querySelector('.packaging-price-tiers').innerHTML=(s.priceTiers||[]).map(packagingPriceTierRowHtml).join('');
+  const tiers=s.priceTiers||[],
+    tierType=tiers[0]?.priceType==='set'?'set':'unit',
+    typeSelect=r.querySelector('.packaging-tier-type');
+  if(typeSelect)typeSelect.value=tierType;
+  r.querySelector('.packaging-price-tiers').innerHTML=tiers.map(t=>packagingPriceTierRowHtml(t,tierType)).join('');
   r.querySelector('.packaging-shipping-points').innerHTML=(s.shippingPoints||[]).map(packagingShippingPointRowHtml).join('');
-  if((s.priceTiers||[]).length||(s.shippingPoints||[]).length)r.querySelector('.packaging-tier-panel')?.classList.remove('hidden');
+  if(tiers.length||(s.shippingPoints||[]).length)r.querySelector('.packaging-tier-panel')?.classList.remove('hidden');
   updatePackagingTierSummary(r);
   updatePackagingTierUnitDisplays(r);
   syncPackagingMainFieldsFromTiers(r)
@@ -158,28 +146,30 @@ function syncPackagingMainFieldsFromTiers(r){
   if(!r)return;
   const tiers=collectPackagingPriceTiers(r),
     points=collectPackagingShippingPoints(r),
-    type=r.querySelector('.packaging-supplier-price-type')?.value||'unit',
+    supplierType=r.querySelector('.packaging-supplier-price-type'),
     qtyInput=r.querySelector('.packaging-supplier-qty'),
     priceInput=r.querySelector('.packaging-supplier-price-entry'),
     shippingInput=r.querySelector('.packaging-supplier-total-shipping'),
     customsInput=r.querySelector('.packaging-supplier-customs');
 
-  // Verbrauchsmaterialien behalten ihre eigene Mengenlogik.
-  if(type!=='consumable'&&tiers.length){
-    const minQty=Math.min(...tiers.map(t=>Math.max(1,num(t.minQty,1))));
-    if(qtyInput&&(!qtyInput.value||num(qtyInput.value)<=0)){
-      qtyInput.value=minQty;
-      qtyInput.dataset.autoFromTier='1'
+  if(tiers.length){
+    const smallest=tiers.slice().sort((a,b)=>a.minQty-b.minQty)[0],
+      tierType=smallest.priceType==='set'?'set':'unit';
+
+    // Staffelpreise sind maßgeblich: kleinste Staffel IMMER in Hauptzeile spiegeln.
+    if(supplierType)supplierType.value=tierType;
+
+    if(tierType==='set'){
+      if(qtyInput)qtyInput.value=Math.max(1,num(smallest.setQty,smallest.minQty));
+      if(priceInput)priceInput.value=num(smallest.setPrice);
+    }else{
+      if(qtyInput)qtyInput.value=Math.max(1,num(smallest.minQty,1));
+      if(priceInput)priceInput.value=num(smallest.unitPrice);
     }
-    const effectiveQty=Math.max(1,num(qtyInput?.value,minQty));
-    if(type==='unit'&&priceInput&&(!priceInput.value||num(priceInput.value)<=0)){
-      const hit=tiers.find(t=>effectiveQty>=Math.max(1,num(t.minQty,1))&&(!num(t.maxQty)||effectiveQty<=num(t.maxQty)));
-      if(hit&&num(hit.unitPrice)>0){
-        priceInput.value=num(hit.unitPrice);
-        priceInput.dataset.autoFromTier='1'
-      }
-    }
-    const sp=points.find(p=>Math.max(1,num(p.qty,1))===effectiveQty);
+
+    const effectiveQty=Math.max(1,num(qtyInput?.value,smallest.minQty)),
+      sp=points.find(p=>Math.max(1,num(p.qty,1))===effectiveQty);
+
     if(sp){
       const inc=num(sp.shippingWithCustoms),normal=num(sp.shipping);
       if(inc>0&&customsInput){
@@ -187,18 +177,20 @@ function syncPackagingMainFieldsFromTiers(r){
         customsInput.dataset.autoDisabledByShipping='1';
         customsInput.title='12 % Zoll deaktiviert, da Versand inkl. Zollabwicklung hinterlegt ist'
       }
-      if(shippingInput&&(!shippingInput.value||num(shippingInput.value)<=0||shippingInput.dataset.autoFromShippingPoint==='1')){
+      if(shippingInput){
         shippingInput.value=inc>0?inc:normal;
         shippingInput.dataset.autoFromShippingPoint='1'
       }
     }
   }
+
   updatePackagingSupplierDerived(r)
 }
 function updatePackagingTierUnitDisplays(r){
   if(!r)return;
+  const globalTierType=r.querySelector('.packaging-tier-type')?.value==='set'?'set':'unit';
   r.querySelectorAll('.packaging-price-tier-row').forEach(row=>{
-    const type=row.querySelector('.pack-tier-price-type')?.value==='set'?'set':'unit',
+    const type=globalTierType,
       price=num(row.querySelector('.pack-tier-price')?.value),
       setQty=Math.max(1,num(row.querySelector('.pack-tier-set-qty')?.value,1)),
       unit=type==='set'?price/setQty:price,
@@ -289,10 +281,25 @@ function bindPackagingSupplierEvents(){
     const toggle=r.querySelector('.toggle-packaging-tiers');
     if(toggle)toggle.onclick=()=>r.querySelector('.packaging-tier-panel')?.classList.toggle('hidden');
 
+    const globalTierType=r.querySelector('.packaging-tier-type');
+    if(globalTierType)globalTierType.onchange=()=>{
+      const type=globalTierType.value==='set'?'set':'unit';
+      const existing=collectPackagingPriceTiers(r);
+      r.querySelector('.packaging-price-tiers').innerHTML=existing.map(t=>{
+        const normalized=type==='set'
+          ? {...t,priceType:'set',setQty:Math.max(1,num(t.setQty,t.minQty,1)),setPrice:num(t.setPrice,num(t.unitPrice)*Math.max(1,num(t.setQty,t.minQty,1)))}
+          : {...t,priceType:'unit',unitPrice:num(t.unitPrice)||((num(t.setPrice)/Math.max(1,num(t.setQty,1))))};
+        return packagingPriceTierRowHtml(normalized,type)
+      }).join('');
+      bindPackagingSupplierEvents();
+      updatePackagingTierUnitDisplays(r);
+      syncPackagingMainFieldsFromTiers(r)
+    };
+
     const addTier=r.querySelector('.add-packaging-price-tier');
     if(addTier)addTier.onclick=()=>{
       r.querySelector('.packaging-tier-panel')?.classList.remove('hidden');
-      r.querySelector('.packaging-price-tiers').insertAdjacentHTML('beforeend',packagingPriceTierRowHtml({minQty:1}));
+      r.querySelector('.packaging-price-tiers').insertAdjacentHTML('beforeend',packagingPriceTierRowHtml({minQty:1},r.querySelector('.packaging-tier-type')?.value==='set'?'set':'unit'));
       bindPackagingSupplierEvents();
       updatePackagingTierSummary(r);
       updatePackagingTierUnitDisplays(r);
@@ -330,7 +337,7 @@ function bindPackagingSupplierEvents(){
       syncPackagingMainFieldsFromTiers(r)
     });
 
-    r.querySelectorAll('.packaging-price-tier-row input,.packaging-price-tier-row select,.packaging-shipping-point-row input').forEach(el=>{const tierHandler=()=>{
+    r.querySelectorAll('.packaging-price-tier-row input,.packaging-shipping-point-row input').forEach(el=>{const tierHandler=()=>{
       if(el.classList.contains('pack-ship-customs')&&num(el.value)>0){
         customs.checked=false;
         customs.dataset.autoDisabledByShipping='1';
