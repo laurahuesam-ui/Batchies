@@ -293,6 +293,40 @@ function salesGrowthInitialPurchase(b){
   const lines=salesGrowthBatchNeeds(b).map(n=>salesGrowthOrderForNeed(n.kind,n.id,n.qty));
   return{lines,total:lines.reduce((a,x)=>a+x.cost,0),missing:lines.some(x=>x.missing)}
 }
+function salesGrowthIncrementalPurchaseForBatch(b,stock){
+  const lines=salesGrowthBatchNeeds(b).map(n=>{
+    const have=Math.max(0,num(stock[n.id]));
+    const missingQty=Math.max(0,n.qty-have);
+
+    if(missingQty<=1e-9){
+      const {x}=salesGrowthSupplier(n.kind,n.id);
+      return {
+        kind:n.kind,id:n.id,name:x?.name||n.id,
+        neededQty:n.qty,stockBefore:have,missingQty:0,
+        baseQty:0,packs:0,orderedQty:0,cost:0,missing:false,
+        coveredByStock:true
+      }
+    }
+
+    const order=salesGrowthOrderForNeed(n.kind,n.id,missingQty);
+    return {
+      ...order,
+      neededQty:n.qty,
+      stockBefore:have,
+      missingQty,
+      coveredByStock:false
+    }
+  });
+
+  return {
+    lines,
+    total:lines.reduce((a,x)=>a+num(x.cost),0),
+    missing:lines.some(x=>x.missing),
+    stockCovered:lines.filter(x=>x.coveredByStock).length,
+    orderLines:lines.filter(x=>!x.coveredByStock&&!x.missing&&x.orderedQty>0).length
+  }
+}
+
 function salesGrowthNonMaterialCashPerSale(b){
   const c=batchCalc(b);
   // Actual cash-flow view:
@@ -435,12 +469,27 @@ function salesGrowthConsumeSale(b,stock){
 }
 function salesGrowthStagePurchaseListHtml(purchase){
   if(!purchase?.lines?.length)return'<div class="tiny">Keine Positionen.</div>';
-  return `<div class="sales-purchase-list">${purchase.lines.map(x=>`<div class="sales-purchase-line">
-    <span><b>${esc(x.id)}</b></span>
-    <span>${esc(x.name)}</span>
-    <span>${x.missing?'kein Lieferant':x.orderedQty+' bestellt'}</span>
-    <strong>${x.missing?'–':euro(x.cost)}</strong>
-  </div>`).join('')}</div>`
+  return `<div class="sales-purchase-list">${purchase.lines.map(x=>{
+    const stockBefore=Math.max(0,num(x.stockBefore)),
+      needed=Math.max(0,num(x.neededQty)),
+      covered=!!x.coveredByStock;
+
+    if(covered){
+      return `<div class="sales-purchase-line">
+        <span><b>${esc(x.id)}</b></span>
+        <span>${esc(x.name)} <span class="tiny">· Bedarf ${needed} · Lager ${stockBefore}</span></span>
+        <span class="positive">✓ aus Lager</span>
+        <strong>0,00 €</strong>
+      </div>`
+    }
+
+    return `<div class="sales-purchase-line">
+      <span><b>${esc(x.id)}</b></span>
+      <span>${esc(x.name)} <span class="tiny">· Bedarf ${needed} · Lager ${stockBefore} · fehlen ${Math.max(0,num(x.missingQty))}</span></span>
+      <span>${x.missing?'kein Lieferant':x.orderedQty+' nachbestellt'}</span>
+      <strong>${x.missing?'–':euro(x.cost)}</strong>
+    </div>`
+  }).join('')}</div>`
 }
 function renderSalesGrowthSimulation(){
   const el=$('#salesSimulationContent');if(!el)return;
@@ -494,7 +543,7 @@ function renderSalesGrowthSimulation(){
   // 2) after the target is active and selling, the cash balance has recovered
   //    to the level it had immediately before paying for that 1. AK.
   for(const target of stageBatches){
-    const purchase=salesGrowthInitialPurchase(target);
+    const purchase=salesGrowthIncrementalPurchaseForBatch(target,stock);
     const stageStartSales=totalSales,
       reorderStart=reorders.length,
       countsStageStart=Object.fromEntries(counts);
@@ -600,13 +649,13 @@ function renderSalesGrowthSimulation(){
       <div class="sales-chain-stage-head">
         <div>
           <div class="sales-chain-stage-title">Stufe ${idx+1} · ${esc(r.target.bid)} · ${esc(r.target.name)}</div>
-          <div class="tiny">Erst 1. AK finanzieren, danach wird ${esc(r.target.bid)} sofort mitverkauft, bis sich diese neue Investition amortisiert hat.</div>
+          <div class="tiny">Zuerst wird das virtuelle Lager geprüft. Nur fehlende PIDs/VIDs werden in MOQ-/Set-/Packungsgrößen nachgekauft. Danach wird ${esc(r.target.bid)} sofort mitverkauft, bis sich dieser zusätzliche Einkauf amortisiert hat.</div>
         </div>
         <span class="badge ${r.amortized?'ready':''}">${r.amortized?'✓ gekauft & amortisiert':r.funded?'gekauft · Amortisation offen':'noch nicht finanziert'}</span>
       </div>
 
       <div class="sales-chain-kpis">
-        <div><div class="kpi-label">1. AK Ziel</div><strong>${euro(r.purchase.total)}</strong></div>
+        <div><div class="kpi-label">Zusätzlicher Einkauf Ziel</div><strong>${euro(r.purchase.total)}</strong></div>
         <div><div class="kpi-label">Verkäufe bis Kauf</div><strong>${r.salesToPurchase}</strong></div>
         <div><div class="kpi-label">Verkäufe nach Kauf bis Amortisation</div><strong>${r.salesAfterPurchase}</strong></div>
         <div><div class="kpi-label">Gesamtverkäufe dieser Stufe</div><strong>${r.salesDuringStage}</strong></div>
@@ -619,20 +668,21 @@ function renderSalesGrowthSimulation(){
         <div><div class="kpi-label">${esc(r.target.bid)} selbst verkauft</div><strong>${targetSalesAfterPurchase}×</strong></div>
       </div>
 
+      <div class="tiny" style="margin-top:8px"><strong>Lagerprüfung:</strong> ${r.purchase.stockCovered||0} Positionen komplett aus vorhandenem Lager · ${r.purchase.orderLines||0} Positionen mussten zusätzlich bestellt werden.</div>
       <div class="tiny" style="margin-top:8px"><strong>Phase 1 – Verkäufe bis die 1. AK gekauft werden konnte:</strong></div>
       <div class="sales-active-counts">${financingCounts||'<span class="tiny">Keine Verkäufe nötig – Geld war bereits vorhanden.</span>'}</div>
 
       <div class="tiny" style="margin-top:8px"><strong>Phase 2 – Verkäufe nach dem Kauf bis zur Amortisation:</strong></div>
       <div class="sales-active-counts">${amortizationCounts||'<span class="tiny">–</span>'}</div>
 
-      <details open><summary>Was muss für ${esc(r.target.bid)} gekauft werden?</summary>${salesGrowthStagePurchaseListHtml(r.purchase)}</details>
+      <details open><summary>Lagerprüfung & zusätzlicher Einkauf für ${esc(r.target.bid)}</summary>${salesGrowthStagePurchaseListHtml(r.purchase)}</details>
       <details><summary>Nachbestellungen während dieser gesamten Stufe (${r.reorders.length})</summary>
         ${r.reorders.length?`<div class="sales-reorder-list">${r.reorders.map(x=>`<div class="sales-reorder-line"><span>Verkauf ${x.saleNumber}</span><span>${esc(x.id)} · ${esc(x.name)} · ${x.orderedQty} nachbestellt</span><strong>${euro(x.cost)}</strong></div>`).join('')}</div>`:'<div class="tiny">Keine Nachbestellungen nötig.</div>'}
       </details>
     </div>`
   }).join('')}
 
-  <div class="tiny" style="margin-top:10px">Modellannahme: Ein neues Ziel-Batch wird bis zu seinem Kauf von den bereits aktiven Batches finanziert. <strong>Sofort nach dem Kauf wird es selbst aktiv und ab der nächsten Verkaufsrunde mitverkauft. Eine Stufe endet erst, wenn die neue 1. AK durch die gemeinsamen Verkäufe wieder verdient wurde.</strong> Sobald mehrere Batches aktiv sind, werden sie reihum verkauft. Materialkosten werden als echte Bestellungen verbucht, nicht als geglätteter EK pro Verkauf; Arbeitszeit, Etsy-Gebühren, Werbung/Risiko, Kundenversand und Fixkosten-Umlage werden pro Verkauf berücksichtigt.</div>`
+  <div class="tiny" style="margin-top:10px">Modellannahme: Vor jedem neuen Ziel-Batch wird zuerst der gemeinsame virtuelle Lagerbestand geprüft. Nur fehlende Positionen werden nachgekauft. <strong>Sofort nach dem Kauf wird es selbst aktiv und ab der nächsten Verkaufsrunde mitverkauft. Eine Stufe endet erst, wenn die neue 1. AK durch die gemeinsamen Verkäufe wieder verdient wurde.</strong> Sobald mehrere Batches aktiv sind, werden sie reihum verkauft. Materialkosten werden als echte Bestellungen verbucht, nicht als geglätteter EK pro Verkauf; Arbeitszeit, Etsy-Gebühren, Werbung/Risiko, Kundenversand und Fixkosten-Umlage werden pro Verkauf berücksichtigt.</div>`
 }
 function initSalesSimulation(){
   const source=$('#salesSimSource'),add=$('#salesSimAddStageBtn'),suggest=$('#salesSimSuggestBtn');
