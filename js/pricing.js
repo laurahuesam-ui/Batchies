@@ -36,6 +36,14 @@ function batchTargetProfitRecommendation(b,nonPlatformCosts,eVar,eFixed){
     price=denom>0?(nonPlatformCosts+eFixed)/denom:0;
   return {recommended:price,targetProfit:price*.25,targetMode:'auto',targetLabel:'über 75 € → 25 % des VK'}
 }
+function automaticTargetProfitForPrice(price){
+  const vk=Math.max(0,num(price));
+  if(vk<=20)return 5;
+  if(vk<=40)return 10;
+  if(vk<=50)return 15;
+  if(vk<=75)return 20;
+  return vk*0.25
+}
 function batchCalc(b,overridePrice=null){
   let productCost=0,packagingCost=0;
   (b.items||[]).forEach(i=>{const x=state.products.find(z=>z.pid===i.pid);if(x)productCost+=productPurchaseCost(x)*Math.max(1,num(i.qty,1))});

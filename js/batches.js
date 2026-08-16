@@ -123,7 +123,7 @@ function renderBatches(){
     '<th class="batch-ek-col">EK</th>'+
     '<th class="batch-rec-col">Empf. VK</th>'+
     '<th class="batch-vk-col">VK</th>'+
-    '<th class="batch-margin-col">Marge</th>'+
+    '<th class="batch-margin-col">Gewinn</th>'+
     '<th class="batch-action-col"></th>'+
     '</tr></thead><tbody>'+
     bs.map(b=>{
@@ -138,7 +138,7 @@ function renderBatches(){
         <td class="money batch-ek-col">${euro(c.total)}</td>
         <td class="money positive batch-rec-col">${euro(c.recommended)}</td>
         <td class="money batch-vk-col">${euro(b.salePrice)}</td>
-        <td class="batch-margin-col ${c.margin>=num(b.targetMargin,30)?'positive':'negative'}">${pct(c.margin)}</td>
+        <td class="batch-margin-col ${c.profit>=automaticTargetProfitForPrice(num(b.salePrice))?'positive':'negative'}" title="Zielgewinn bei diesem VK: ${euro(automaticTargetProfitForPrice(num(b.salePrice)))}">${euro(c.profit)}</td>
         <td class="batch-action-col"><button type="button" class="iconbtn batch-edit-btn" data-key="${esc(b.key)}" title="Batch bearbeiten">✎</button></td>
       </tr>`
     }).join('')+
