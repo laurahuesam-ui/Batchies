@@ -29,3 +29,90 @@ function renderShoppingSimulation(){
   $$('.simulation-batch-check').forEach(c=>c.onchange=()=>{const set=new Set(state.simulationSelectedBatches||[]);c.checked?set.add(c.value):set.delete(c.value);state.simulationSelectedBatches=[...set];localStorage.setItem(STORAGE_KEY,JSON.stringify(state));renderShoppingSimulation()});
   $$('.simulation-add-batch').forEach(btn=>btn.onclick=()=>{const set=new Set(state.simulationSelectedBatches||[]);set.add(btn.dataset.key);state.simulationSelectedBatches=[...set];localStorage.setItem(STORAGE_KEY,JSON.stringify(state));renderShoppingSimulation()});
 }
+
+
+
+function ensureInventorySimulationState(){
+  if(!state.inventorySimulation||typeof state.inventorySimulation!=='object')state.inventorySimulation={stock:{}};
+  if(!state.inventorySimulation.stock||typeof state.inventorySimulation.stock!=='object')state.inventorySimulation.stock={}
+}
+function inventoryFirstOrderQty(kind,id){
+  if(kind==='PID'){
+    const x=state.products.find(p=>p.pid===id),s=(x?.suppliers||[]).find(z=>z.preferred)||(x?.suppliers||[])[0];
+    return s?supplierQtyBase(s):0
+  }
+  const x=state.packaging.find(v=>v.vid===id),s=preferredPackagingSupplier(x);
+  return s?supplierQtyBase(s):0
+}
+function inventoryUnit(kind,id){
+  if(kind==='VID'){
+    const x=state.packaging.find(v=>v.vid===id),s=preferredPackagingSupplier(x);
+    return s?.priceType==='consumable'?(s.consumptionUnit||'Einheit'):'Stk.'
+  }
+  return 'Stk.'
+}
+function inventoryUsedIds(){
+  const ids=new Set();
+  state.batches.forEach(b=>{(b.items||[]).forEach(i=>ids.add(i.pid));(b.packagingItems||[]).forEach(i=>ids.add(i.vid))});
+  return ids
+}
+function inventoryStockValue(id){ensureInventorySimulationState();return Math.max(0,num(state.inventorySimulation.stock[id]))}
+function saveInventorySimulation(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(state))}catch(err){console.error('Lager-Simulation speichern:',err)}}
+
+function renderInventoryEditor(){
+  const el=$('#inventoryEditor');if(!el)return;
+  ensureInventorySimulationState();
+  const q=($('#inventorySearch')?.value||'').toLowerCase().trim(),only=!!$('#inventoryOnlyUsed')?.checked,used=inventoryUsedIds();
+  const rows=[
+    ...state.products.map(x=>({kind:'PID',id:x.pid,name:x.name})),
+    ...state.packaging.map(x=>({kind:'VID',id:x.vid,name:x.name}))
+  ].filter(x=>(!only||used.has(x.id))&&(!q||(x.id+' '+x.name).toLowerCase().includes(q)));
+
+  el.className='inventory-editor';
+  el.innerHTML=rows.map(x=>`<div class="inventory-row">
+    <div><div class="inventory-id">${esc(x.id)}</div><div class="inventory-kind">${x.kind==='PID'?'Produkt':'Verpackung'}</div></div>
+    <div>${esc(x.name)}</div>
+    <div class="tiny">1. AK: ${inventoryFirstOrderQty(x.kind,x.id)} ${esc(inventoryUnit(x.kind,x.id))}</div>
+    <input class="inventory-stock-input" data-id="${esc(x.id)}" type="number" min="0" step="${x.kind==='VID'&&inventoryUnit(x.kind,x.id)!=='Stk.'?'0.01':'1'}" value="${inventoryStockValue(x.id)}">
+  </div>`).join('')||'<div class="empty">Keine Treffer</div>';
+  $$('.inventory-stock-input').forEach(inp=>inp.oninput=()=>{state.inventorySimulation.stock[inp.dataset.id]=Math.max(0,num(inp.value));saveInventorySimulation();renderInventoryResults()})
+}
+function inventoryBatchCapacity(b){
+  const caps=[];
+  (b.items||[]).forEach(i=>{const have=inventoryStockValue(i.pid),need=Math.max(1,num(i.qty,1));caps.push({id:i.pid,have,need,capacity:Math.floor(have/need),unit:'Stk.'})});
+  (b.packagingItems||[]).forEach(i=>{const have=inventoryStockValue(i.vid),need=Math.max(.001,num(i.qty,1));caps.push({id:i.vid,have,need,capacity:Math.floor(have/need),unit:inventoryUnit('VID',i.vid)})});
+  const capacity=caps.length?Math.min(...caps.map(x=>x.capacity)):0,limiter=caps.filter(x=>x.capacity===capacity);
+  return{capacity,caps,limiter}
+}
+function renderInventoryResults(){
+  const el=$('#inventorySimulationContent');if(!el)return;
+  ensureInventorySimulationState();
+  const rows=state.batches.map(b=>({b,...inventoryBatchCapacity(b)})).sort((a,b)=>b.capacity-a.capacity||a.b.bid.localeCompare(b.b.bid,'de',{numeric:true})),
+    possible=rows.filter(x=>x.capacity>0),
+    maxCap=rows.length?Math.max(...rows.map(x=>x.capacity)):0,
+    best=rows.filter(x=>x.capacity===maxCap&&maxCap>0).map(x=>x.b.bid).join(', ')||'–';
+
+  el.innerHTML=`<div class="inventory-summary">
+    <div class="production-kpi"><div class="label">Batches mindestens 1× möglich</div><div class="value">${possible.length} / ${rows.length}</div></div>
+    <div class="production-kpi"><div class="label">Höchste Reichweite</div><div class="value">${maxCap}×</div></div>
+    <div class="production-kpi"><div class="label">Beste Reichweite</div><div class="value" style="font-size:13px">${esc(best)}</div></div>
+  </div>
+  <div class="inventory-batch-grid">${rows.map(x=>`<div class="inventory-batch-card ${x.capacity>0?'possible':'blocked'}">
+    <div class="inventory-batch-head"><strong>${esc(x.b.bid)} · ${esc(x.b.name)}</strong><span class="badge ${x.capacity>0?'ready':''}">${x.capacity}× möglich</span></div>
+    <div class="tiny">Engpass: ${x.limiter.length?x.limiter.map(l=>esc(l.id)+' · '+l.have+' vorhanden / '+l.need+' benötigt').join(', '):'–'}</div>
+    <details><summary>Alle Positionen</summary><div class="inventory-lines">${x.caps.map(c=>`<div><span>${esc(c.id)}</span><span>${c.have} / ${c.need} ${esc(c.unit)}</span><strong>${c.capacity}×</strong></div>`).join('')}</div></details>
+  </div>`).join('')}</div>`
+}
+function renderInventorySimulation(){
+  if(!$('#inventoryEditor'))return;
+  ensureInventorySimulationState();
+  renderInventoryEditor();renderInventoryResults();
+  const search=$('#inventorySearch'),only=$('#inventoryOnlyUsed'),first=$('#inventoryUseFirstOrderBtn'),zero=$('#inventoryZeroBtn');
+  if(search)search.oninput=renderInventoryEditor;
+  if(only)only.onchange=renderInventoryEditor;
+  if(first)first.onclick=()=>{
+    [...state.products.map(x=>['PID',x.pid]),...state.packaging.map(x=>['VID',x.vid])].forEach(([kind,id])=>state.inventorySimulation.stock[id]=inventoryFirstOrderQty(kind,id));
+    saveInventorySimulation();renderInventoryEditor();renderInventoryResults()
+  };
+  if(zero)zero.onclick=()=>{state.inventorySimulation.stock={};saveInventorySimulation();renderInventoryEditor();renderInventoryResults()}
+}

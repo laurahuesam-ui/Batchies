@@ -63,12 +63,18 @@
 .packaging-tier-header-top{display:flex;align-items:center;justify-content:space-between;gap:10px}
 .packaging-tier-type-control{display:flex;flex-direction:column;gap:4px;max-width:220px}
 .packaging-tier-type{width:100%}
+
+.planning-scenarios{margin-top:16px}.planning-custom{display:grid;grid-template-columns:230px 1fr;gap:12px;align-items:end;margin-top:12px}.planning-custom label{display:flex;flex-direction:column;gap:5px}
+.inventory-tools{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:10px}.inventory-toggle{display:flex;align-items:center;gap:6px;margin:0}.inventory-toggle input{width:auto}
+.inventory-editor{max-height:360px;overflow:auto;border:1px solid var(--line);border-radius:12px}.inventory-row{display:grid;grid-template-columns:100px 1fr 130px 120px;gap:10px;align-items:center;padding:8px 10px;border-bottom:1px solid var(--line)}.inventory-row:last-child{border-bottom:0}.inventory-row input{padding:6px 8px}.inventory-id{font-weight:800}.inventory-kind{font-size:10px;color:var(--muted)}
+.inventory-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:12px}.inventory-batch-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:10px}.inventory-batch-card{border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff}.inventory-batch-card.blocked{opacity:.7}.inventory-batch-head{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:6px}.inventory-lines{display:grid;gap:4px;margin-top:8px}.inventory-lines>div{display:grid;grid-template-columns:1fr auto auto;gap:10px;font-size:12px}.inventory-overstock{color:var(--warn)}
+@media(max-width:800px){.planning-custom{grid-template-columns:1fr}.inventory-summary{grid-template-columns:1fr}.inventory-row{grid-template-columns:90px 1fr}.inventory-row input{grid-column:2}}
 </style>
 </head>
 <body>
 <div class="app">
 <header class="topbar">
-  <div class="brand"><div class="logo">B</div><div><h1>Batchies</h1><div class="subtitle">Produktentwicklung & Stammdaten · v2.8.3</div></div></div>
+  <div class="brand"><div class="logo">B</div><div><h1>Batchies</h1><div class="subtitle">Produktentwicklung & Stammdaten · v2.9.0</div></div></div>
   <div class="actions"><button class="btn" id="exportBackupBtn">Backup</button><button class="btn" id="importBackupBtn">Import</button><button class="btn primary" id="addProductBtn">+ Produkt</button><button class="btn primary" id="addBatchBtn">+ Batch</button><input type="file" id="backupFile" accept="application/json" hidden></div>
 </header>
 <nav class="tabs"><button class="tab active" data-tab="overview">Übersicht</button><button class="tab" data-tab="products">Produkte</button><button class="tab" data-tab="packaging">Verpackung</button><button class="tab" data-tab="batches">Batches</button><button class="tab" data-tab="fees">Gebühren & Kalkulation</button><button class="tab" data-tab="investments">Investitionen</button><button class="tab" data-tab="simulation">Einkaufs-Simulation</button><button class="tab" data-tab="data">Stammdaten & CSV</button></nav>
@@ -117,6 +123,12 @@
   <div class="card span12"><div class="toolbar"><div><h2 class="section-title" style="margin-bottom:2px">Einkaufs-Simulation</h2><div class="muted">Wähle die Batches, für die du einkaufen möchtest. Batchies bündelt gleiche Produkte und zeigt, welche weiteren Batches mit diesem Warenkorb bereits möglich sind und was jeweils noch fehlt.</div></div><button class="btn" id="simulationResetBtn" type="button">Auswahl zurücksetzen</button></div><div id="simulationBatchPicker" class="sim-batch-grid"></div></div>
   <div class="card span12"><h2 class="section-title">Virtueller Warenkorb</h2><div id="simulationSummary" class="sim-summary"></div><div id="simulationStock" style="margin-top:12px"></div></div>
   <div class="card span12"><h2 class="section-title">Welche Batches sind damit möglich?</h2><div class="muted" style="margin-bottom:12px">Grün markierte Batches sind mit dem virtuellen Warenkorb bereits vollständig möglich. Die übrigen sind nach geringster zusätzlicher Investition sortiert.</div><div id="simulationResults"></div></div>
+  <div class="card span12">
+    <div class="toolbar"><div><h2 class="section-title" style="margin-bottom:2px">Lager-Simulation</h2><div class="muted">Trage deinen tatsächlichen Bestand für alle PIDs und VIDs ein oder starte mit der jeweiligen 1. Bestellmenge. Batchies zeigt dir, welche Batches damit wie oft möglich sind und welche Artikel die Engpässe bilden.</div></div><div class="inline"><button class="btn" id="inventoryUseFirstOrderBtn" type="button">1. AK als Bestand</button><button class="btn" id="inventoryZeroBtn" type="button">Alles auf 0</button></div></div>
+    <div class="inventory-tools"><input id="inventorySearch" class="search" placeholder="PID, VID oder Name suchen …"><label class="inventory-toggle"><input id="inventoryOnlyUsed" type="checkbox"> nur in Batches verwendete Artikel</label></div>
+    <div id="inventoryEditor"></div>
+    <div id="inventorySimulationContent" style="margin-top:16px"></div>
+  </div>
 </div></section>
 <section id="tab-data" class="tabpage hidden"><div class="grid">
   <div class="card span6"><h2 class="section-title">Produkte als CSV</h2><p class="muted">Exportiert die Produkt-Stammdaten inklusive PID, Kalkulationspreis, Lieferanten, URLs, Preisen und Status.</p><button class="btn primary" id="productsCsvBtn">Produkte CSV exportieren</button></div>

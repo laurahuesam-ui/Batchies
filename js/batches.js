@@ -16,15 +16,13 @@ function batchProductionPlan(b){
   function addLine(kind,id,qty,x,s){
     if(!x||!s){
       missing=true;
-      const line={id,name:x?.name||(kind==='product'?'Produkt fehlt':'Verpackung fehlt'),qty,available:0,orderCost:0,batches:0,missing:true,unitLanded:0};
-      (kind==='product'?productLines:packagingLines).push(line);
-      possible=0; return
+      const line={kind,id,name:x?.name||(kind==='product'?'Produkt fehlt':'Verpackung fehlt'),qty,available:0,orderCost:0,batches:0,missing:true,unitLanded:0};
+      (kind==='product'?productLines:packagingLines).push(line);possible=0;return
     }
     const available=supplierQtyBase(s),orderCost=supplierOrderCost(s),count=Math.floor(available/qty),
       unitLanded=available>0?orderCost/available:0;
-    firstOrderCost+=orderCost;
-    possible=Math.min(possible,count);
-    (kind==='product'?productLines:packagingLines).push({id,name:x.name,qty,available,orderCost,batches:count,missing:false,unitLanded})
+    firstOrderCost+=orderCost;possible=Math.min(possible,count);
+    (kind==='product'?productLines:packagingLines).push({kind,id,name:x.name,qty,available,orderCost,batches:count,missing:false,unitLanded})
   }
 
   pg.forEach((qty,id)=>{const x=state.products.find(p=>p.pid===id),s=(x?.suppliers||[]).find(z=>z.preferred)||(x?.suppliers||[])[0];addLine('product',id,qty,x,s)});
@@ -34,49 +32,29 @@ function batchProductionPlan(b){
   if(possible===Infinity)possible=0;
   const limiter=lines.filter(x=>x.batches===possible&&!x.missing);
 
-  // Wert des nach Verkauf aller mit der 1. AK möglichen vollständigen Batches verbleibenden Lagerbestands.
   let remainingInventoryValue=0;
   lines.forEach(x=>{
     if(x.missing)return;
-    const used=Math.min(x.available,possible*x.qty),
-      remaining=Math.max(0,x.available-used);
-    x.usedForPossible=used;
-    x.remainingAfterPossible=remaining;
-    x.remainingValue=remaining*x.unitLanded;
-    remainingInventoryValue+=x.remainingValue
+    const used=Math.min(x.available,possible*x.qty),remaining=Math.max(0,x.available-used);
+    x.remainingAfterPossible=remaining;x.remainingValue=remaining*x.unitLanded;remainingInventoryValue+=x.remainingValue
   });
 
-  // Sell-through-Ziel wird NUR vom Produktlager (PID) bestimmt.
-  // Verpackungsmaterialien (VID) dürfen das Ziel nicht künstlich erhöhen.
-  const validProductLines=productLines.filter(x=>!x.missing);
-  const maxSellThroughBatches=validProductLines.length
-    ? Math.max(...validProductLines.map(x=>Math.ceil(x.available/x.qty)),0)
-    : 0;
+  function scenario(targetBatches){
+    targetBatches=Math.max(1,Math.floor(num(targetBatches,1)));
+    let additionalCapital=0,totalCapital=firstOrderCost,remainingValue=0;
+    const details=lines.map(x=>{
+      if(x.missing)return {...x,extraOrders:0,extraCapital:0,totalAvailable:x.available,remainingAfterTarget:0};
+      const required=targetBatches*x.qty,extraNeeded=Math.max(0,required-x.available),
+        extraOrders=extraNeeded>0?Math.ceil(extraNeeded/x.available):0,
+        extraCapital=extraOrders*x.orderCost,totalAvailable=x.available+extraOrders*x.available,
+        remainingAfterTarget=Math.max(0,totalAvailable-required),remainingValueAfterTarget=remainingAfterTarget*x.unitLanded;
+      additionalCapital+=extraCapital;totalCapital+=extraCapital;remainingValue+=remainingValueAfterTarget;
+      return {...x,required,extraOrders,extraCapital,totalAvailable,remainingAfterTarget,remainingValueAfterTarget}
+    });
+    return{targetBatches,additionalCapital,totalCapital,remainingValue,details}
+  }
 
-  // Für diese PID-bestimmte Batchzahl werden weiterhin alle zusätzlich benötigten
-  // PIDs UND VIDs in ganzen MOQ-/Set-/Packungsschritten nachbestellt.
-  let sellThroughTotalCapital=firstOrderCost,additionalCapitalToSellThrough=0;
-  lines.forEach(x=>{
-    if(x.missing)return;
-    const required=maxSellThroughBatches*x.qty,
-      extraNeeded=Math.max(0,required-x.available);
-    if(extraNeeded<=0){
-      x.extraOrders=0;x.extraCapital=0;x.totalAvailableForSellThrough=x.available;return
-    }
-    const packs=Math.ceil(extraNeeded/x.available),
-      extraCapital=packs*x.orderCost;
-    x.extraOrders=packs;
-    x.extraCapital=extraCapital;
-    x.totalAvailableForSellThrough=x.available+packs*x.available;
-    additionalCapitalToSellThrough+=extraCapital;
-    sellThroughTotalCapital+=extraCapital
-  });
-
-  return{
-    productLines,packagingLines,lines,firstOrderCost,possible,limiter,
-    totalInvestment:firstOrderCost,unitBatchCost:batchCalc(b).total,missing,
-    remainingInventoryValue,maxSellThroughBatches,additionalCapitalToSellThrough,sellThroughTotalCapital
-  };
+  return{productLines,packagingLines,lines,firstOrderCost,possible,limiter,unitBatchCost:batchCalc(b).total,missing,remainingInventoryValue,scenario}
 }
 function productionLinesHtml(lines,label){
   if(!lines.length)return'';
@@ -92,19 +70,25 @@ function renderBatchProductionPlan(b){
   const el=$('#batchProductionContent');if(!el)return;
   const p=batchProductionPlan(b);
   if(!p.lines.length){el.innerHTML='<div class="assistant-empty" style="margin-top:10px">Füge Produkte oder Verpackungsmaterialien hinzu, um die Herstellungsplanung zu berechnen.</div>';return}
-  const limiter=p.limiter.length?p.limiter.map(x=>esc(x.id+' · '+x.name)).join(', '):(p.missing?'Lieferantendaten fehlen':'–');
+  const limiter=p.limiter.length?p.limiter.map(x=>esc(x.id+' · '+x.name)).join(', '):(p.missing?'Lieferantendaten fehlen':'–'),
+    custom=Math.max(1,Math.floor(num($('#batchPlanHorizon')?.value,25))),
+    scenarios=[10,25,50,100].map(n=>p.scenario(n)),customScenario=p.scenario(custom);
+
   el.innerHTML=`<div class="production-kpis">
     <div class="production-kpi"><div class="label">Kapitalbedarf 1. Einkauf</div><div class="value">${euro(p.firstOrderCost)}</div></div>
-    <div class="production-kpi"><div class="label">Mögliche vollständige Batches</div><div class="value">${p.possible}</div></div>
+    <div class="production-kpi"><div class="label">Mögliche Batches ohne Nachkauf</div><div class="value">${p.possible}</div></div>
     <div class="production-kpi"><div class="label">Lagerbestand danach</div><div class="value">${euro(p.remainingInventoryValue)}</div></div>
     <div class="production-kpi"><div class="label">Engpass</div><div class="value" style="font-size:12px">${limiter}</div></div>
-    <div class="production-kpi"><div class="label">Max. Sell-through-Ziel (nur PID)</div><div class="value">${p.maxSellThroughBatches} Batches</div></div>
-    <div class="production-kpi"><div class="label">Zusatzkapital bis dahin</div><div class="value">${euro(p.additionalCapitalToSellThrough)}</div></div>
-    <div class="production-kpi"><div class="label">Gesamtkapital bis alles der 1. AK verbraucht ist</div><div class="value">${euro(p.sellThroughTotalCapital)}</div></div>
     <div class="production-kpi"><div class="label">Material-EK pro Batch</div><div class="value">${euro(p.unitBatchCost)}</div></div>
   </div>
-  <div class="tiny" style="margin-top:7px">„Lagerbestand danach“ bewertet den Restbestand nach Verkauf der ${p.possible} mit der ersten Bestellung direkt möglichen Batches zu den tatsächlichen Einstandskosten. Das Sell-through-Ziel wird ausschließlich durch die PIDs bestimmt: Es zeigt, wie viele Batches nötig sind, bis auch der größte Produktbestand aus der 1. Bestellung verbraucht ist. Für diese Batchzahl werden anschließend alle zusätzlich benötigten PIDs und VIDs in ganzen MOQ-/Set-/Packungsschritten hochgerechnet.${p.missing?' Für mindestens eine Position fehlen Lieferantendaten.':''}</div>
-  ${productionLinesHtml(p.productLines,'Produkte (PID)')}${productionLinesHtml(p.packagingLines,'Verpackung (VID)')}`
+  <div class="planning-scenarios">
+    <div class="toolbar compact"><strong>Ausbau-Szenarien</strong><span class="tiny">Nachbestellungen in echten MOQ-/Set-/Packungsschritten</span></div>
+    <div class="production-kpis">${scenarios.map(s=>`<div class="production-kpi scenario-kpi"><div class="label">${s.targetBatches} Batches</div><div class="value">${euro(s.additionalCapital)} zusätzlich</div><div class="tiny">Gesamt ${euro(s.totalCapital)} · Restlager ${euro(s.remainingValue)}</div></div>`).join('')}</div>
+    <div class="planning-custom"><label><span>Eigener Planungshorizont</span><input id="batchPlanHorizon" type="number" min="1" step="1" value="${custom}"></label><div class="production-kpi"><div class="label">${custom} Batches</div><div class="value">${euro(customScenario.additionalCapital)} zusätzlich</div><div class="tiny">Gesamtkapital ${euro(customScenario.totalCapital)} · Restlager ${euro(customScenario.remainingValue)}</div></div></div>
+    <div class="tiny">Große Überbestände einzelner Produkte bestimmen nicht mehr das Ziel. Du entscheidest, ob du z. B. für 10, 25, 50 oder 100 Verkäufe planen willst.</div>
+  </div>
+  ${productionLinesHtml(p.productLines,'Produkte (PID)')}${productionLinesHtml(p.packagingLines,'Verpackung (VID)')}`;
+  const h=$('#batchPlanHorizon');if(h)h.oninput=()=>renderBatchProductionPlan(b)
 }
 function renderBatches(){
   state.batches.forEach(b=>{

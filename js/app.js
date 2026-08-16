@@ -4,6 +4,7 @@ function productIsCalculable(p){
   if(!s)return false;
   const unit=supplierLandedUnitCost(s);
   return Number.isFinite(unit)&&unit>0
+  try{if(typeof renderInventorySimulation==='function')renderInventorySimulation()}catch(err){console.error('Lager-Simulation:',err)}
 }
 function packagingIsCalculable(v){
   const s=(v?.suppliers||[]).find(x=>x.preferred)||(v?.suppliers||[])[0];
