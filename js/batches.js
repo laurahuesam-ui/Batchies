@@ -213,6 +213,16 @@ function collectBatchDraft(){
     notes:$('#batchNotes').value.trim()
   }
 }
+function renderBatchProfitProjection(profitPerBatch){
+  const el=$('#batchProfitProjection');if(!el)return;
+  const quantities=[1,5,10,25,50,100],
+    profit=num(profitPerBatch);
+  el.innerHTML=quantities.map(q=>`<div class="batch-profit-projection-card">
+    <div class="qty">${q} Batch${q===1?'':'es'}</div>
+    <div class="profit ${profit>=0?'positive':'negative'}">${euro(profit*q)}</div>
+  </div>`).join('')
+}
+
 function liveBatchCalc(){
   const b=collectBatchDraft(),c=batchCalc(b);
 
@@ -249,6 +259,7 @@ function liveBatchCalc(){
   $('#batchDb2Live').textContent=euro(c.db2);
   $('#batchFixedAllocationLive').textContent=euro(c.fixedAllocation);
   $('#batchProfitLive').textContent=euro(c.profit);
+  renderBatchProfitProjection(c.profit);
   $('#batchMarginLive').textContent=pct(c.margin);
   $('#batchRecommended').textContent=euro(c.recommended);
   const tp=$('#batchTargetProfit'),auto=$('#batchAutoTargetProfit'),hint=$('#batchTargetProfitHint');
