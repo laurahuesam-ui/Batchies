@@ -208,7 +208,9 @@ function collectBatchDraft(){
     status:$('#batchStatus').value,
     items,
     packagingItems,
-    targetMargin:num($('#batchTargetMargin').value,30),
+    targetMargin:30,
+    targetProfit:num($('#batchTargetProfit').value,5),
+    autoTargetProfit:$('#batchAutoTargetProfit').checked,
     salePrice:num($('#batchSalePrice').value),
     useOffsite:$('#batchUseOffsite').checked,
     useCurrency:$('#batchUseCurrency').checked,
@@ -260,6 +262,9 @@ function liveBatchCalc(){
   $('#batchProfitLive').textContent=euro(c.profit);
   $('#batchMarginLive').textContent=pct(c.margin);
   $('#batchRecommended').textContent=euro(c.recommended);
+  const tp=$('#batchTargetProfit'),auto=$('#batchAutoTargetProfit'),hint=$('#batchTargetProfitHint');
+  if(tp&&auto){tp.disabled=auto.checked;if(auto.checked)tp.value=c.targetProfit.toFixed(2)}
+  if(hint)hint.textContent=auto?.checked?`Automatisch: ${c.targetLabel} · Zielgewinn beim empfohlenen VK: ${euro(c.targetProfit)}`:'Eigener Zielgewinn wird zusätzlich zu allen Kosten und deiner Arbeitsentlohnung eingerechnet.';
 
   try{renderBatchProductionPlan(b)}catch(err){console.error('Batch-Plan:',err)}
   if($('#batchKey').value&&typeof renderBatchAssistant==='function'){
@@ -273,7 +278,7 @@ function openBatch(key=null){
   if(dlg.open)dlg.close();
   $('#batchItemRows').innerHTML='';
   $('#batchPackagingRows').innerHTML='';
-  $('#batchKey').value=b?.key||'';$('#batchBid').value=b?.bid||'';$('#batchBidLabel').textContent=b?.bid||'BID wird beim Speichern vergeben';$('#batchModalTitle').textContent=b?'Batch bearbeiten':'Neuer Batch';$('#batchName').value=b?.name||'';$('#batchStatus').value=b?.status||'idea';renderBatchItemRows(b?.items||[]);renderBatchPackagingRows(b?.packagingItems||[]);$('#batchTargetMargin').value=b?.targetMargin??30;$('#batchSalePrice').value=b?.salePrice??0;$('#batchUseOffsite').checked=!!b?.useOffsite;$('#batchUseCurrency').checked=!!b?.useCurrency;$('#batchUseSetup').checked=!!b?.useSetup;$('#batchLaborMinutes').value=b?.laborMinutes??0;$('#batchHourlyRate').value=b?.hourlyRate??0;$('#batchOutboundShipping').value=b?.outboundShipping??0;$('#batchAdCost').value=b?.adCost??0;$('#batchRiskPct').value=b?.riskPct??0;$('#batchFixedAllocation').value=b?.fixedAllocation??0;$('#batchNotes').value=b?.notes||'';$('#deleteBatchBtn').classList.toggle('hidden',!b);
+  $('#batchKey').value=b?.key||'';$('#batchBid').value=b?.bid||'';$('#batchBidLabel').textContent=b?.bid||'BID wird beim Speichern vergeben';$('#batchModalTitle').textContent=b?'Batch bearbeiten':'Neuer Batch';$('#batchName').value=b?.name||'';$('#batchStatus').value=b?.status||'idea';renderBatchItemRows(b?.items||[]);renderBatchPackagingRows(b?.packagingItems||[]);$('#batchTargetProfit').value=b?.targetProfit??5;$('#batchAutoTargetProfit').checked=b?.autoTargetProfit!==false;$('#batchTargetProfit').disabled=$('#batchAutoTargetProfit').checked;$('#batchSalePrice').value=b?.salePrice??0;$('#batchUseOffsite').checked=!!b?.useOffsite;$('#batchUseCurrency').checked=!!b?.useCurrency;$('#batchUseSetup').checked=!!b?.useSetup;$('#batchLaborMinutes').value=b?.laborMinutes??0;$('#batchHourlyRate').value=b?.hourlyRate??0;$('#batchOutboundShipping').value=b?.outboundShipping??0;$('#batchAdCost').value=b?.adCost??0;$('#batchRiskPct').value=b?.riskPct??0;$('#batchFixedAllocation').value=b?.fixedAllocation??0;$('#batchNotes').value=b?.notes||'';$('#deleteBatchBtn').classList.toggle('hidden',!b);
   liveBatchCalc();
   dlg.showModal();
   if(b&&typeof renderBatchAssistant==='function'){try{renderBatchAssistant(b)}catch(err){console.error('Batch-Assistent:',err)}}

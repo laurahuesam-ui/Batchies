@@ -14,41 +14,48 @@ function productInboundShipping(p){const s=(p.suppliers||[]).find(x=>x.preferred
 function productPurchaseCost(p){return num(p.basePrice)+productInboundShipping(p)+(p.costs||[]).reduce((a,c)=>a+num(c.amount),0)}
 function costTotal(p){return productPurchaseCost(p)+num(p.shippingCost)}
 function calcProduct(p,overridePrice=null){const price=overridePrice===null?num(p.salePrice):num(overridePrice),shippingCharged=num(p.shippingCharged),revenue=price+shippingCharged,rate=variableFeeRate(p),baseFee=fixedFees(p),rawPlatform=baseFee+revenue*rate,feeVat=rawPlatform*(state.settings.feeVatPct/100),fees=rawPlatform+feeVat,costs=costTotal(p),profit=revenue-costs-fees,margin=revenue>0?profit/revenue*100:0,target=num(p.targetMargin,30)/100,vatMult=1+state.settings.feeVatPct/100,eVar=rate*vatMult,eFixed=baseFee*vatMult,denom=1-target-eVar;let recommended=0;if(denom>0){const needed=(costs+eFixed)/denom;recommended=Math.max(0,needed-shippingCharged);recommended=Math.ceil((recommended-1e-9)*10)/10}return{price,revenue,fees,costs,profit,margin,recommended}}
+function batchTargetProfitRecommendation(b,nonPlatformCosts,eVar,eFixed){
+  const manual=Math.max(0,num(b.targetProfit,5));
+  if(b.autoTargetProfit===false){
+    const denom=1-eVar;
+    const price=denom>0?(nonPlatformCosts+eFixed+manual)/denom:0;
+    return {recommended:price,targetProfit:manual,targetMode:'manual'}
+  }
+  const tiers=[
+    {max:20,profit:5,label:'bis 20 € → 5 €'},
+    {max:40,profit:10,label:'bis 40 € → 10 €'},
+    {max:50,profit:15,label:'bis 50 € → 15 €'},
+    {max:75,profit:20,label:'bis 75 € → 20 €'}
+  ];
+  for(const t of tiers){
+    const denom=1-eVar,
+      price=denom>0?(nonPlatformCosts+eFixed+t.profit)/denom:0;
+    if(price<=t.max+1e-9)return {recommended:price,targetProfit:t.profit,targetMode:'auto',targetLabel:t.label}
+  }
+  const denom=1-eVar-.25,
+    price=denom>0?(nonPlatformCosts+eFixed)/denom:0;
+  return {recommended:price,targetProfit:price*.25,targetMode:'auto',targetLabel:'über 75 € → 25 % des VK'}
+}
 function batchCalc(b,overridePrice=null){
   let productCost=0,packagingCost=0;
   (b.items||[]).forEach(i=>{const x=state.products.find(z=>z.pid===i.pid);if(x)productCost+=productPurchaseCost(x)*Math.max(1,num(i.qty,1))});
   (b.packagingItems||[]).forEach(i=>{const v=state.packaging.find(x=>x.vid===i.vid),s=(v?.suppliers||[]).find(x=>x.preferred)||(v?.suppliers||[])[0];if(s)packagingCost+=supplierLandedUnitCost(s)*Math.max(s.priceType==='consumable'?0.001:1,num(i.qty,1))});
-
   const materialCost=productCost+packagingCost,
-    price=overridePrice===null?num(b.salePrice):num(overridePrice),
-    revenue=price,
-    rate=variableFeeRate(b),baseFee=fixedFees(b),
-    rawPlatform=baseFee+revenue*rate,
-    feeVat=rawPlatform*(state.settings.feeVatPct/100),
-    fees=rawPlatform+feeVat,
+    price=overridePrice===null?num(b.salePrice):num(overridePrice),revenue=price,
+    rate=variableFeeRate(b),baseFee=fixedFees(b),rawPlatform=baseFee+revenue*rate,
+    feeVat=rawPlatform*(state.settings.feeVatPct/100),fees=rawPlatform+feeVat,
     laborCost=Math.max(0,num(b.laborMinutes))*Math.max(0,num(b.hourlyRate))/60,
-    outboundShipping=Math.max(0,num(b.outboundShipping)),
-    adCost=Math.max(0,num(b.adCost)),
-    riskCost=materialCost*Math.max(0,num(b.riskPct))/100,
-    fixedAllocation=Math.max(0,num(b.fixedAllocation)),
-    db1=revenue-materialCost-fees,
-    db2=db1-laborCost-outboundShipping-adCost-riskCost,
-    profit=db2-fixedAllocation,
-    margin=revenue>0?profit/revenue*100:0,
-    target=num(b.targetMargin,30)/100,
-    vatMult=1+state.settings.feeVatPct/100,
-    eVar=rate*vatMult,eFixed=baseFee*vatMult,
+    outboundShipping=Math.max(0,num(b.outboundShipping)),adCost=Math.max(0,num(b.adCost)),
+    riskCost=materialCost*Math.max(0,num(b.riskPct))/100,fixedAllocation=Math.max(0,num(b.fixedAllocation)),
+    db1=revenue-materialCost-fees,db2=db1-laborCost-outboundShipping-adCost-riskCost,
+    profit=db2-fixedAllocation,margin=revenue>0?profit/revenue*100:0,
+    vatMult=1+state.settings.feeVatPct/100,eVar=rate*vatMult,eFixed=baseFee*vatMult,
     nonPlatformCosts=materialCost+laborCost+outboundShipping+adCost+riskCost+fixedAllocation,
-    denom=1-target-eVar;
-
-  let recommended=0;
-  if(denom>0){
-    recommended=(nonPlatformCosts+eFixed)/denom;
-    recommended=Math.ceil((recommended-1e-9)*10)/10
-  }
-  return{
-    productCost,packagingCost,extra:packagingCost,total:materialCost,costs:materialCost,
-    price,revenue,fees,laborCost,outboundShipping,adCost,riskCost,fixedAllocation,
-    db1,db2,profit,margin,recommended
-  }
+    target=batchTargetProfitRecommendation(b,nonPlatformCosts,eVar,eFixed);
+  let recommended=Math.ceil((Math.max(0,target.recommended)-1e-9)*10)/10;
+  // Nach Rundung Zielgewinn auf Basis des endgültigen empfohlenen VK anzeigen.
+  const targetProfit=target.targetMode==='auto'&&recommended>75?recommended*.25:target.targetProfit;
+  return{productCost,packagingCost,extra:packagingCost,total:materialCost,costs:materialCost,
+    price,revenue,fees,laborCost,outboundShipping,adCost,riskCost,fixedAllocation,db1,db2,profit,margin,
+    recommended,targetProfit,targetMode:target.targetMode,targetLabel:target.targetLabel||'eigener Zielgewinn'}
 }
