@@ -68,18 +68,41 @@ function collectPackagingSuppliers(){return $$('.packaging-supplier-row').map(pa
 function packagingPreferredSupplierFromDraft(){const a=collectPackagingSuppliers();return a.find(x=>x.preferred)||a[0]}
 
 function packagingPriceTierRowHtml(t={}){
-  const unit=num(t.unitPrice);
-  return `<div class="packaging-price-tier-row"><input class="pack-tier-min" type="number" min="1" step="1" value="${Math.max(1,num(t.minQty,1))}" placeholder="Ab Menge"><input class="pack-tier-max" type="number" min="1" step="1" value="${num(t.maxQty)||''}" placeholder="Bis (leer = offen)"><input class="pack-tier-price" type="number" min="0" step="0.0001" value="${unit||''}" placeholder="€/Stück"><input class="pack-tier-unit-display" type="text" value="${unit?euro(unit):'–'}" readonly title="Preis/Stück dieser Staffel"><button type="button" class="iconbtn remove-packaging-price-tier">✕</button></div>`
+  const type=t.priceType==='set'?'set':'unit',
+    setQty=Math.max(1,num(t.setQty,1)),
+    setPrice=num(t.setPrice),
+    unit=type==='set'?(setPrice/setQty):num(t.unitPrice);
+  return `<div class="packaging-price-tier-row">
+    <input class="pack-tier-min" type="number" min="1" step="1" value="${Math.max(1,num(t.minQty,1))}" placeholder="Ab Menge">
+    <input class="pack-tier-max" type="number" min="1" step="1" value="${num(t.maxQty)||''}" placeholder="Bis (leer = offen)">
+    <select class="pack-tier-price-type">
+      <option value="unit" ${type==='unit'?'selected':''}>Stück</option>
+      <option value="set" ${type==='set'?'selected':''}>Set</option>
+    </select>
+    <input class="pack-tier-price" type="number" min="0" step="0.0001" value="${type==='set'?(setPrice||''):(num(t.unitPrice)||'')}" placeholder="${type==='set'?'Setpreis':'€/Stück'}">
+    <input class="pack-tier-set-qty" type="number" min="1" step="1" value="${setQty}" placeholder="Stück im Set" ${type==='set'?'':'disabled'}>
+    <input class="pack-tier-unit-display" type="text" value="${unit?euro(unit):'–'}" readonly title="Effektiver Preis/Stück dieser Staffel">
+    <button type="button" class="iconbtn remove-packaging-price-tier">✕</button>
+  </div>`
 }
 function packagingShippingPointRowHtml(s={}){
   return `<div class="packaging-shipping-point-row"><input class="pack-ship-qty" type="number" min="1" step="1" value="${Math.max(1,num(s.qty,1))}" placeholder="Menge"><input class="pack-ship-normal" type="number" min="0" step="0.01" value="${num(s.shipping)||''}" placeholder="Versand"><input class="pack-ship-customs" type="number" min="0" step="0.01" value="${num(s.shippingWithCustoms)||''}" placeholder="Versand inkl. Zollabwicklung"><input class="pack-ship-unit-display" type="text" value="–" readonly title="Effektiver Preis/Stück bei dieser Menge"><button type="button" class="iconbtn remove-packaging-shipping-point">✕</button></div>`
 }
 function collectPackagingPriceTiers(r){
-  return [...r.querySelectorAll('.packaging-price-tier-row')].map(x=>({
-    minQty:Math.max(1,num(x.querySelector('.pack-tier-min')?.value,1)),
-    maxQty:num(x.querySelector('.pack-tier-max')?.value)||null,
-    unitPrice:num(x.querySelector('.pack-tier-price')?.value)
-  })).filter(x=>x.unitPrice>0).sort((a,b)=>a.minQty-b.minQty)
+  return [...r.querySelectorAll('.packaging-price-tier-row')].map(x=>{
+    const priceType=x.querySelector('.pack-tier-price-type')?.value==='set'?'set':'unit',
+      rawPrice=num(x.querySelector('.pack-tier-price')?.value),
+      setQty=Math.max(1,num(x.querySelector('.pack-tier-set-qty')?.value,1)),
+      unitPrice=priceType==='set'?rawPrice/setQty:rawPrice;
+    return {
+      minQty:Math.max(1,num(x.querySelector('.pack-tier-min')?.value,1)),
+      maxQty:num(x.querySelector('.pack-tier-max')?.value)||null,
+      priceType,
+      unitPrice,
+      setPrice:priceType==='set'?rawPrice:0,
+      setQty:priceType==='set'?setQty:1
+    }
+  }).filter(x=>x.unitPrice>0).sort((a,b)=>a.minQty-b.minQty)
 }
 function collectPackagingShippingPoints(r){
   return [...r.querySelectorAll('.packaging-shipping-point-row')].map(x=>({
@@ -145,9 +168,16 @@ function syncPackagingMainFieldsFromTiers(r){
 function updatePackagingTierUnitDisplays(r){
   if(!r)return;
   r.querySelectorAll('.packaging-price-tier-row').forEach(row=>{
-    const price=num(row.querySelector('.pack-tier-price')?.value),
+    const type=row.querySelector('.pack-tier-price-type')?.value==='set'?'set':'unit',
+      price=num(row.querySelector('.pack-tier-price')?.value),
+      setQty=Math.max(1,num(row.querySelector('.pack-tier-set-qty')?.value,1)),
+      unit=type==='set'?price/setQty:price,
+      qtyInput=row.querySelector('.pack-tier-set-qty'),
+      priceInput=row.querySelector('.pack-tier-price'),
       out=row.querySelector('.pack-tier-unit-display');
-    if(out)out.value=price>0?euro(price):'–'
+    if(qtyInput)qtyInput.disabled=type!=='set';
+    if(priceInput)priceInput.placeholder=type==='set'?'Setpreis':'€/Stück';
+    if(out)out.value=unit>0?euro(unit):'–'
   });
 
   const tiers=collectPackagingPriceTiers(r),
@@ -260,7 +290,7 @@ function bindPackagingSupplierEvents(){
       syncPackagingMainFieldsFromTiers(r)
     });
 
-    r.querySelectorAll('.packaging-price-tier-row input,.packaging-shipping-point-row input').forEach(el=>el.oninput=()=>{
+    r.querySelectorAll('.packaging-price-tier-row input,.packaging-price-tier-row select,.packaging-shipping-point-row input').forEach(el=>{const tierHandler=()=>{
       if(el.classList.contains('pack-ship-customs')&&num(el.value)>0){
         customs.checked=false;
         customs.dataset.autoDisabledByShipping='1';
@@ -269,7 +299,7 @@ function bindPackagingSupplierEvents(){
       updatePackagingTierSummary(r);
       updatePackagingTierUnitDisplays(r);
       syncPackagingMainFieldsFromTiers(r)
-    });
+    };el.oninput=tierHandler;el.onchange=tierHandler});
 
     updatePackagingSupplierDerived(r);
     updatePackagingTierUnitDisplays(r)
