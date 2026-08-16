@@ -5,7 +5,7 @@ function packagingSupplierRowHtml(s){
     entry=type==='consumable'?num(s.purchasePrice):(type==='set'?num(s.setPrice):num(s.price)),
     unit=supplierLandedUnitCost(s),order=supplierOrderCost(s),
     amount=Math.max(0.0001,num(s.amountPerPackage,1)),cunit=s.consumptionUnit||'m';
-  return `<div class="packaging-supplier-row supplier-row" data-id="${esc(s.id||crypto.randomUUID())}">
+  return `<div class="packaging-supplier-row" data-id="${esc(s.id||crypto.randomUUID())}">
     <div class="supplier-grid">
       <div class="supplier-cell"><span class="supplier-mini-label">Lieferant</span><input class="packaging-supplier-name" value="${esc(s.name||'')}" placeholder="Lieferant"></div>
       <div class="supplier-cell"><span class="supplier-mini-label">URL</span><input class="packaging-supplier-url" type="url" value="${esc(s.url||'')}" placeholder="https://…"></div>

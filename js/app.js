@@ -94,7 +94,7 @@ $('#batchesTable').addEventListener('click',e=>{
   const key=btn.dataset.key;
   if(key)openBatch(key);
 });$('#searchProducts').oninput=renderProducts;$('#filterProductStatus').onchange=renderProducts;$('#filterProductColor').onchange=renderProducts;$('#searchPackaging').oninput=renderPackaging;$('#searchBatches').oninput=renderBatches;const refreshSuggestions=$('#refreshBatchSuggestionsBtn');if(refreshSuggestions)refreshSuggestions.onclick=renderBatchSuggestions;
-$('#addSupplierBtn').onclick=()=>{const has=$$('.supplier-row').length;$('#supplierRows').insertAdjacentHTML('beforeend',supplierRowHtml({id:crypto.randomUUID(),name:'',url:'',priceType:'unit',price:0,minOrderQty:1,setPrice:0,setQty:1,totalShipping:0,imageUrl:'',customs:false,preferred:!has,priceTiers:[],shippingPoints:[]}));const nr=$$('.supplier-row').at(-1);if(nr)renderSupplierTierData(nr,{priceTiers:[],shippingPoints:[]});bindSupplierEvents();liveCalc()};
+$('#addSupplierBtn').onclick=()=>{const has=$$('#supplierRows .supplier-row').length;$('#supplierRows').insertAdjacentHTML('beforeend',supplierRowHtml({id:crypto.randomUUID(),name:'',url:'',priceType:'unit',price:0,minOrderQty:1,setPrice:0,setQty:1,totalShipping:0,imageUrl:'',customs:false,preferred:!has,priceTiers:[],shippingPoints:[]}));const nr=$$('.supplier-row').at(-1);if(nr)renderSupplierTierData(nr,{priceTiers:[],shippingPoints:[]});bindSupplierEvents();liveCalc()};
 $('#usePreferredPriceBtn').onclick=()=>{const s=preferredSupplier();if(s){$('#productBasePrice').value=supplierUnitPrice(s).toFixed(2);if(!$('#productImageUrl').value&&s.imageUrl){$('#productImageUrl').value=s.imageUrl;renderImagePreview(s.imageUrl)}liveCalc()}};
 $('#addCostBtn').onclick=()=>{$('#costRows').insertAdjacentHTML('beforeend','<div class="cost-row"><input class="cost-name" placeholder="Kostenposition"><input class="cost-amount" type="number" min="0" step="0.01" value="0"><button type="button" class="iconbtn remove-cost">✕</button></div>');bindCostEvents();liveCalc()};
 ['productBasePrice','shippingCost','shippingCharged','targetMargin','salePrice','useOffsite','useCurrency','useSetup'].forEach(id=>$('#'+id).addEventListener('input',liveCalc));$('#useRecommendedBtn').onclick=()=>{$('#salePrice').value=calcProduct(collectProductDraft()).recommended.toFixed(2);liveCalc()};
@@ -108,16 +108,20 @@ $('#addPackagingSupplierBtn').onclick=()=>{
   $('#packagingSupplierRows').insertAdjacentHTML('beforeend',packagingSupplierRowHtml({id:crypto.randomUUID(),name:'',url:'',priceType:'unit',price:0,minOrderQty:1,setPrice:0,setQty:1,totalShipping:0,imageUrl:'',customs:false,preferred:!has}));
   bindPackagingSupplierEvents();
 };
+function persistBatchiesState(){localStorage.setItem(STORAGE_KEY,JSON.stringify(state))}
+function reportSaveError(area,err){console.error(area+' speichern fehlgeschlagen:',err);alert(area+' konnte nicht gespeichert werden. Vorhandene Stammdaten bleiben erhalten. Fehler: '+(err?.message||err))}
 $('#packagingForm').addEventListener('submit',e=>{
-  if(e.submitter?.value==='cancel')return;
   e.preventDefault();
-  const v=collectPackagingDraft();
-  if(!v.name){$('#packagingName').focus();return}
-  if(!v.vid){state.counters.packaging++;v.vid=displayId('VID',state.counters.packaging)}
-  const i=state.packaging.findIndex(x=>x.key===v.key);
-  if(i>=0)state.packaging[i]=v;else state.packaging.push(v);
-  saveState();
-  $('#packagingDialog').close();
+  try{
+    const v=collectPackagingDraft();
+    if(!v.name){$('#packagingName').focus();return}
+    if(!v.vid){state.counters.packaging++;v.vid=displayId('VID',state.counters.packaging)}
+    const i=state.packaging.findIndex(x=>x.key===v.key);
+    if(i>=0)state.packaging[i]=v;else state.packaging.push(v);
+    persistBatchiesState();
+    const dlg=$('#packagingDialog');if(dlg.open)dlg.close();
+    setTimeout(()=>renderAll(),0);
+  }catch(err){reportSaveError('Verpackungsmaterial',err)}
 });
 $('#deletePackagingBtn').onclick=()=>{
   const key=$('#packagingKey').value;
@@ -127,29 +131,40 @@ $('#deletePackagingBtn').onclick=()=>{
     $('#packagingDialog').close();
   }
 };
-$('#productForm').addEventListener('submit',e=>{if(e.submitter?.value==='cancel')return;e.preventDefault();const p=collectProductDraft();if(!p.name){$('#productName').focus();return}if(!p.pid){state.counters.product++;p.pid=displayId('PID',state.counters.product)}const i=state.products.findIndex(x=>x.key===p.key);if(i>=0)state.products[i]=p;else state.products.push(p);if(p.category&&p.subcategory)learnCategory(p);localStorage.setItem(STORAGE_KEY,JSON.stringify(state));if($('#productDialog').open)$('#productDialog').close();setTimeout(()=>renderAll(),0)});
+$('#productForm').addEventListener('submit',e=>{
+  e.preventDefault();
+  try{
+    const p=collectProductDraft();
+    if(!p.name){$('#productName').focus();return}
+    if(!p.pid){state.counters.product++;p.pid=displayId('PID',state.counters.product)}
+    const i=state.products.findIndex(x=>x.key===p.key);
+    if(i>=0)state.products[i]=p;else state.products.push(p);
+    if(p.category&&p.subcategory)learnCategory(p);
+    persistBatchiesState();
+    const dlg=$('#productDialog');if(dlg.open)dlg.close();
+    setTimeout(()=>renderAll(),0);
+  }catch(err){reportSaveError('Produkt',err)}
+});
 $('#deleteProductBtn').onclick=()=>{const key=$('#productKey').value;if(key&&confirm('Produkt wirklich löschen? Verknüpfungen in Batches bleiben als PID sichtbar, können aber nicht mehr kalkuliert werden.')){state.products=state.products.filter(p=>p.key!==key);localStorage.setItem(STORAGE_KEY,JSON.stringify(state));if($('#productDialog').open)$('#productDialog').close();setTimeout(()=>renderAll(),0)}};
 $('#addBatchItemBtn').onclick=()=>{const opts='<option value="">Produkt wählen …</option>'+state.products.map(p=>`<option value="${esc(p.pid)}">${esc(p.pid)} · ${esc(p.name)}</option>`).join('');$('#batchItemRows').insertAdjacentHTML('beforeend',`<div class="batch-product-row"><select class="batch-product">${opts}</select><input class="batch-qty" type="number" min="1" step="1" value="1"><div class="money batch-line-cost">0,00 €</div><button type="button" class="iconbtn remove-batch-item">✕</button></div>`);bindBatchItemEvents();liveBatchCalc()};
 $('#addBatchPackagingBtn').onclick=()=>{const opts='<option value="">Verpackung wählen …</option>'+state.packaging.map(v=>`<option value="${esc(v.vid)}">${esc(v.vid)} · ${esc(v.name)}</option>`).join('');$('#batchPackagingRows').insertAdjacentHTML('beforeend',`<div class="batch-packaging-row"><select class="batch-packaging">${opts}</select><div class="batch-packaging-usage-wrap"><input class="batch-packaging-qty" type="number" min="0.001" step="0.01" value="1"><span class="batch-packaging-unit">Stk.</span></div><div class="money batch-packaging-line-cost">0,00 €</div><button type="button" class="iconbtn remove-batch-packaging">✕</button></div>`);bindBatchPackagingEvents();liveBatchCalc()};
 ['batchTargetMargin','batchSalePrice','batchUseOffsite','batchUseCurrency','batchUseSetup'].forEach(id=>$('#'+id).addEventListener('input',liveBatchCalc));$('#batchUseRecommendedBtn').onclick=()=>{$('#batchSalePrice').value=batchCalc(collectBatchDraft()).recommended.toFixed(2);liveBatchCalc()};
 $('#batchForm').addEventListener('submit',e=>{
-  if(e.submitter?.value==='cancel')return;
   e.preventDefault();
-  const b=collectBatchDraft();
-  b.items=sortBatchItemsByPid(b.items);
-  b.packagingItems=sortBatchPackagingByVid(b.packagingItems);
-  if(!b.name){$('#batchName').focus();return}
-  if(!b.bid){state.counters.batch++;b.bid=displayId('BID',state.counters.batch)}
-  const i=state.batches.findIndex(x=>x.key===b.key);
-  if(i>=0)state.batches[i]=b;else state.batches.push(b);
-  localStorage.setItem(STORAGE_KEY,JSON.stringify(state));
-  const dlg=$('#batchDialog');
-  if(dlg.open)dlg.close();
-  setTimeout(()=>{
-    renderBatches();
-    try{renderOverview()}catch(err){console.error('Dashboard:',err)}
-  },0);
-});$('#deleteBatchBtn').onclick=()=>{
+  try{
+    const b=collectBatchDraft();
+    b.items=sortBatchItemsByPid(b.items);
+    b.packagingItems=sortBatchPackagingByVid(b.packagingItems);
+    if(!b.name){$('#batchName').focus();return}
+    if(!b.bid){state.counters.batch++;b.bid=displayId('BID',state.counters.batch)}
+    const i=state.batches.findIndex(x=>x.key===b.key);
+    if(i>=0)state.batches[i]=b;else state.batches.push(b);
+    persistBatchiesState();
+    const dlg=$('#batchDialog');if(dlg.open)dlg.close();
+    setTimeout(()=>renderAll(),0);
+  }catch(err){reportSaveError('Batch',err)}
+});
+$('#deleteBatchBtn').onclick=()=>{
   const key=$('#batchKey').value;
   if(key&&confirm('Batch wirklich löschen?')){
     state.batches=state.batches.filter(b=>b.key!==key);

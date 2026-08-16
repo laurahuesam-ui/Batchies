@@ -53,7 +53,7 @@
 <body>
 <div class="app">
 <header class="topbar">
-  <div class="brand"><div class="logo">B</div><div><h1>Batchies</h1><div class="subtitle">Produktentwicklung & Stammdaten · v2.6.7</div></div></div>
+  <div class="brand"><div class="logo">B</div><div><h1>Batchies</h1><div class="subtitle">Produktentwicklung & Stammdaten · v2.6.8</div></div></div>
   <div class="actions"><button class="btn" id="exportBackupBtn">Backup</button><button class="btn" id="importBackupBtn">Import</button><button class="btn primary" id="addProductBtn">+ Produkt</button><button class="btn primary" id="addBatchBtn">+ Batch</button><input type="file" id="backupFile" accept="application/json" hidden></div>
 </header>
 <nav class="tabs"><button class="tab active" data-tab="overview">Übersicht</button><button class="tab" data-tab="products">Produkte</button><button class="tab" data-tab="packaging">Verpackung</button><button class="tab" data-tab="batches">Batches</button><button class="tab" data-tab="fees">Gebühren & Kalkulation</button><button class="tab" data-tab="investments">Investitionen</button><button class="tab" data-tab="simulation">Einkaufs-Simulation</button><button class="tab" data-tab="data">Stammdaten & CSV</button></nav>
@@ -110,7 +110,7 @@
 </div></section>
 </main></div>
 
-<dialog id="productDialog"><form method="dialog" class="modal" id="productForm">
+<dialog id="productDialog"><form method="dialog" class="modal" id="productForm" novalidate>
 <div class="modal-head"><div><h2 id="productModalTitle">Produkt</h2><div class="statusline"><span class="idchip" id="productPidLabel">PID wird beim Speichern vergeben</span><span class="muted">Produkt-Stammdatum</span></div></div><button type="button" class="iconbtn close-product-dialog" aria-label="Schließen">✕</button></div>
 <input type="hidden" id="productKey"><input type="hidden" id="productPid">
 <div class="row"><div class="field col8"><label>Produktname</label><input id="productName" required placeholder="z. B. Tasse / Kerze / Geschenkbox"></div><div class="field col4"><label>Status</label><select id="productStatus"><option value="idea">Idee</option><option value="research">Recherche</option><option value="prototype">Prototyp</option><option value="ready">Verkaufsbereit</option></select></div><div class="field col3"><label>Hauptkategorie</label><select id="productCategory"></select></div><div class="field col3"><label>Unterkategorie</label><select id="productSubcategory"></select></div><div class="field col6"><label>Kalkulationspreis/Stück (€)</label><input id="productBasePrice" type="number" min="0" step="0.01" value="0"><div class="tiny">Wird vom bevorzugten Lieferanten übernommen, bleibt aber manuell bearbeitbar.</div></div><div class="col12"><div class="info" style="margin-bottom:6px">Automatische Kategorie aktiv: Batchies wertet Produktname, Lieferanten-URLs und Notizen aus. Du kannst Haupt- und Unterkategorie jederzeit manuell korrigieren; deine Korrektur wird lokal gelernt.</div><div id="categorySuggestion" class="category-suggest hidden"></div></div></div>
@@ -129,10 +129,10 @@
 <div class="row"><div class="field col4"><label><input class="switch" id="useOffsite" type="checkbox"> Offsite Ads einrechnen</label></div><div class="field col4"><label><input class="switch" id="useCurrency" type="checkbox"> Währungsumrechnung</label></div><div class="field col4"><label><input class="switch" id="useSetup" type="checkbox"> Shop-Setup-Umlage</label></div></div>
 <div class="grid"><div class="calcbox span6"><div class="calcrow"><span>Stückkosten gesamt</span><strong id="liveCost">0,00 €</strong></div><div class="calcrow"><span>Etsy-Gebühren</span><strong id="liveFees">0,00 €</strong></div><div class="calcrow"><span>Gewinn</span><strong id="liveProfit">0,00 €</strong></div><div class="calcrow total"><span>Ist-Marge</span><strong id="liveMargin">0,0 %</strong></div></div><div class="calcbox span6"><div class="kpi-label">Empfohlener Mindestpreis</div><div class="kpi-value" id="recommendedPrice">0,00 €</div><button type="button" class="btn primary" id="useRecommendedBtn">Empfehlung übernehmen</button><div class="small" style="margin-top:8px">Auf 0,10 € aufgerundet.</div></div></div>
 <div class="field" style="margin-top:14px"><label>Notizen / Produktentwicklung</label><textarea id="productNotes" placeholder="Varianten, Ideen, offene Fragen …"></textarea></div>
-<div class="modal-foot"><button type="button" class="btn danger hidden" id="deleteProductBtn">Produkt löschen</button><span style="flex:1"></span><button type="button" class="btn cancel-product-dialog">Abbrechen</button><button type="submit" class="btn primary" value="save">Speichern</button></div>
+<div class="modal-foot"><button type="button" class="btn danger hidden" id="deleteProductBtn">Produkt löschen</button><span style="flex:1"></span><button type="button" class="btn cancel-product-dialog">Abbrechen</button><button type="submit" class="btn primary" value="save" id="saveProductBtn">Speichern</button></div>
 </form></dialog>
 
-<dialog id="batchDialog"><form method="dialog" class="modal" id="batchForm">
+<dialog id="batchDialog"><form method="dialog" class="modal" id="batchForm" novalidate>
 <div class="modal-head"><div><h2 id="batchModalTitle">Batch</h2><div class="statusline"><span class="idchip" id="batchBidLabel">BID wird beim Speichern vergeben</span><span class="muted">Batch-Stammdatum</span></div></div><button type="button" class="iconbtn close-batch-dialog" aria-label="Schließen">✕</button></div>
 <input type="hidden" id="batchKey"><input type="hidden" id="batchBid">
 <div class="row"><div class="field col8"><label>Batchname</label><input id="batchName" required placeholder="z. B. Selfcare Geschenkset"></div><div class="field col4"><label>Status</label><select id="batchStatus"><option value="idea">Idee</option><option value="research">Recherche</option><option value="prototype">Prototyp</option><option value="ready">Verkaufsbereit</option></select></div></div>
@@ -144,10 +144,10 @@
 <div class="row" style="margin-top:12px"><div class="field col4"><label><input class="switch" id="batchUseOffsite" type="checkbox"> Offsite Ads einrechnen</label></div><div class="field col4"><label><input class="switch" id="batchUseCurrency" type="checkbox"> Währungsumrechnung</label></div><div class="field col4"><label><input class="switch" id="batchUseSetup" type="checkbox"> Shop-Setup-Umlage</label></div></div>
 <div id="batchProductionPlan" class="production-plan"><div class="assistant-head"><div><h3 class="section-title" style="margin-bottom:2px">Herstellungsplanung</h3><div class="muted">Eine Mindestbestellung je bevorzugtem Lieferanten: Was kostet der erste Einkauf und wie viele vollständige Batches entstehen daraus?</div></div></div><div id="batchProductionContent"></div></div>
 <div id="batchAssistant" class="batch-assistant hidden"><div class="assistant-head"><div><h3 class="section-title" style="margin-bottom:2px">Batch-Assistent</h3><div class="muted">Analysiert diesen Batch nur anhand deiner vorhandenen Produkt-Stammdaten und bestehenden Batches.</div></div><span class="assistant-score" id="batchAssistantScore">0 %</span></div><div id="batchAssistantContent"></div></div><div class="field" style="margin-top:14px"><label>Notizen</label><textarea id="batchNotes" placeholder="Verpackung, Thema, Varianten, offene Punkte …"></textarea></div>
-<div class="modal-foot"><button type="button" class="btn danger hidden" id="deleteBatchBtn">Batch löschen</button><span style="flex:1"></span><button type="button" class="btn cancel-batch-dialog">Abbrechen</button><button type="submit" class="btn primary" value="save">Speichern</button></div>
+<div class="modal-foot"><button type="button" class="btn danger hidden" id="deleteBatchBtn">Batch löschen</button><span style="flex:1"></span><button type="button" class="btn cancel-batch-dialog">Abbrechen</button><button type="submit" class="btn primary" value="save" id="saveBatchBtn">Speichern</button></div>
 </form></dialog>
 
-<dialog id="packagingDialog"><form method="dialog" class="modal" id="packagingForm">
+<dialog id="packagingDialog"><form method="dialog" class="modal" id="packagingForm" novalidate>
   <div class="modal-head"><div><h2 id="packagingModalTitle">Verpackungsmaterial</h2><div class="statusline"><span class="idchip" id="packagingVidLabel">VID wird beim Speichern vergeben</span><span class="muted">Verpackungs-Stammdatum</span></div></div><button type="button" class="iconbtn close-packaging-dialog" aria-label="Schließen">✕</button></div>
   <input type="hidden" id="packagingKey"><input type="hidden" id="packagingVid">
   <div class="row"><div class="field col8"><label>Verpackungsmaterial</label><input id="packagingName" required placeholder="z. B. Geschenkbox, Seidenpapier, Füllmaterial"></div><div class="field col4"><label>Status</label><select id="packagingStatus"><option value="idea">Idee</option><option value="research">Recherche</option><option value="prototype">Prototyp</option><option value="ready">Verkaufsbereit</option></select></div></div>
@@ -156,7 +156,7 @@
   <div id="packagingSupplierRows"></div>
   <button type="button" class="btn" id="addPackagingSupplierBtn">+ Lieferant / URL</button>
   <div class="field" style="margin-top:14px"><label>Notizen</label><textarea id="packagingNotes" placeholder="Größe, Farbe, Material, Einsatz, offene Fragen …"></textarea></div>
-  <div class="modal-foot"><button type="button" class="btn danger hidden" id="deletePackagingBtn">Verpackungsmaterial löschen</button><span style="flex:1"></span><button type="button" class="btn cancel-packaging-dialog">Abbrechen</button><button type="submit" class="btn primary" value="save">Speichern</button></div>
+  <div class="modal-foot"><button type="button" class="btn danger hidden" id="deletePackagingBtn">Verpackungsmaterial löschen</button><span style="flex:1"></span><button type="button" class="btn cancel-packaging-dialog">Abbrechen</button><button type="submit" class="btn primary" value="save" id="savePackagingBtn">Speichern</button></div>
 </form></dialog>
 
 <script src="js/category-data.js"></script>
