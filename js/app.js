@@ -76,7 +76,7 @@ function renderOverview(){
     '</tbody></table></div>'
 }
 function renderSettings(){const s=state.settings;['listingFee','transactionPct','paymentPct','paymentFixed','offsitePct','currencyPct','feeVatPct','setupFee','setupSales'].forEach(k=>{const e=$('#'+k);if(e&&document.activeElement!==e)e.value=s[k]});$('#setupPerSale').textContent=euro(s.setupSales>0?s.setupFee/s.setupSales:0)}
-$$('.tab').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab)));$$('[data-go]').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.go)));function switchTab(t){$$('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));$$('.tabpage').forEach(p=>p.classList.add('hidden'));$('#tab-'+t).classList.remove('hidden')}
+$$('.tab').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab)));$$('[data-go]').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.go)));function switchTab(t){$$('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));$$('.tabpage').forEach(p=>p.classList.add('hidden'));$('#tab-'+t).classList.remove('hidden');if(t==='simulation'&&typeof renderInventorySimulation==='function'){try{renderInventorySimulation()}catch(err){console.error('Lager-Simulation öffnen:',err)}}}
 initColorFilter();$('#addProductBtn').onclick=()=>openProduct();
 $('#productsTable').addEventListener('click',e=>{
   const btn=e.target.closest('.product-edit-btn');
@@ -198,5 +198,5 @@ function renderInvestments(){
   $$('.investment-remove').forEach(b=>b.onclick=()=>{const key=b.closest('tr').dataset.key;state.investments=state.investments.filter(x=>x.key!==key);saveState()})
 }
 
-$('#addInvestmentBtn').onclick=()=>{state.investments.push({key:crypto.randomUUID(),type:'',url:'',cost:0});saveState()};const simulationReset=$('#simulationResetBtn');if(simulationReset)simulationReset.onclick=()=>{state.simulationSelectedBatches=[];localStorage.setItem(STORAGE_KEY,JSON.stringify(state));renderShoppingSimulation()};
+$('#addInvestmentBtn').onclick=()=>{state.investments.push({key:crypto.randomUUID(),type:'',url:'',cost:0});saveState()};const simulationReset=$('#simulationResetBtn');if(simulationReset)simulationReset.onclick=()=>{state.simulationSelectedBatches=[];localStorage.setItem(STORAGE_KEY,JSON.stringify(state));renderShoppingSimulation()};const inventoryFirstOrderBtn=$('#inventoryUseFirstOrderBtn');if(inventoryFirstOrderBtn)inventoryFirstOrderBtn.onclick=()=>{if(typeof applyInventoryFirstOrder==='function')applyInventoryFirstOrder()};const inventoryZeroBtn=$('#inventoryZeroBtn');if(inventoryZeroBtn)inventoryZeroBtn.onclick=()=>{if(typeof clearInventorySimulationStock==='function')clearInventorySimulationStock()};
 renderAll();if('serviceWorker' in navigator)window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));

@@ -103,16 +103,46 @@ function renderInventoryResults(){
     <details><summary>Alle Positionen</summary><div class="inventory-lines">${x.caps.map(c=>`<div><span>${esc(c.id)}</span><span>${c.have} / ${c.need} ${esc(c.unit)}</span><strong>${c.capacity}×</strong></div>`).join('')}</div></details>
   </div>`).join('')}</div>`
 }
+
+function applyInventoryFirstOrder(){
+  ensureInventorySimulationState();
+  let changed=0;
+  state.products.forEach(x=>{
+    const qty=inventoryFirstOrderQty('PID',x.pid);
+    state.inventorySimulation.stock[x.pid]=qty;
+    if(qty>0)changed++
+  });
+  state.packaging.forEach(x=>{
+    const qty=inventoryFirstOrderQty('VID',x.vid);
+    state.inventorySimulation.stock[x.vid]=qty;
+    if(qty>0)changed++
+  });
+  saveInventorySimulation();
+  renderInventoryEditor();
+  renderInventoryResults();
+  const status=$('#inventoryActionStatus');
+  if(status)status.textContent='✓ 1. AK übernommen ('+changed+' Positionen)';
+}
+function clearInventorySimulationStock(){
+  ensureInventorySimulationState();
+  state.inventorySimulation.stock={};
+  saveInventorySimulation();
+  renderInventoryEditor();
+  renderInventoryResults();
+  const status=$('#inventoryActionStatus');
+  if(status)status.textContent='✓ Bestand auf 0 gesetzt';
+}
+window.applyInventoryFirstOrder=applyInventoryFirstOrder;
+window.clearInventorySimulationStock=clearInventorySimulationStock;
+
 function renderInventorySimulation(){
   if(!$('#inventoryEditor'))return;
   ensureInventorySimulationState();
-  renderInventoryEditor();renderInventoryResults();
+  renderInventoryEditor();
+  renderInventoryResults();
   const search=$('#inventorySearch'),only=$('#inventoryOnlyUsed'),first=$('#inventoryUseFirstOrderBtn'),zero=$('#inventoryZeroBtn');
   if(search)search.oninput=renderInventoryEditor;
   if(only)only.onchange=renderInventoryEditor;
-  if(first)first.onclick=()=>{
-    [...state.products.map(x=>['PID',x.pid]),...state.packaging.map(x=>['VID',x.vid])].forEach(([kind,id])=>state.inventorySimulation.stock[id]=inventoryFirstOrderQty(kind,id));
-    saveInventorySimulation();renderInventoryEditor();renderInventoryResults()
-  };
-  if(zero)zero.onclick=()=>{state.inventorySimulation.stock={};saveInventorySimulation();renderInventoryEditor();renderInventoryResults()}
+  if(first)first.onclick=applyInventoryFirstOrder;
+  if(zero)zero.onclick=clearInventorySimulationStock;
 }
