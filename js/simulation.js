@@ -481,9 +481,12 @@ function renderSalesGrowthSimulation(){
   }
 
   // First, amortize source business.
+  // Keep these reorders separate so the start phase is transparent too.
+  const sourceReorderStart=reorders.length;
   while(cash<0&&totalSales<MAX_SALES){
     if(!oneSale())break
   }
+  const sourceReorders=reorders.slice(sourceReorderStart);
 
   // Then finance each target. Target 1. AK is paid from available free cash.
   for(const target of stageBatches){
@@ -523,7 +526,7 @@ function renderSalesGrowthSimulation(){
     <div class="production-kpi"><div class="label">Start-Batch amortisiert</div><div class="value">${sourceBreakEvenAt?sourceBreakEvenAt.totalSales+' Verkäufe':'nicht erreicht'}</div></div>
     <div class="production-kpi"><div class="label">Gesamtverkäufe simuliert</div><div class="value">${totalSales}</div></div>
     <div class="production-kpi"><div class="label">Freies Geld am Ende</div><div class="value">${euro(cash)}</div></div>
-    <div class="production-kpi"><div class="label">Nachbestellungen</div><div class="value">${reorders.length}</div></div>
+    <div class="production-kpi"><div class="label">Nachbestellungen gesamt</div><div class="value">${reorders.length}</div><div class="tiny">davon ${sourceReorders.length} bis Start-Amortisation</div></div>
   </div>
 
   <div class="sales-chain-stage done">
@@ -532,9 +535,12 @@ function renderSalesGrowthSimulation(){
       <div><div class="kpi-label">1. AK</div><strong>${euro(sourcePurchase.total)}</strong></div>
       <div><div class="kpi-label">Cash je Verkauf vor Material-Nachkauf</div><strong>${euro(cashPerSaleSource)}</strong></div>
       <div><div class="kpi-label">Break-even nach</div><strong>${sourceBreakEvenAt?sourceBreakEvenAt.totalSales+' Verkäufen':'–'}</strong></div>
-      <div><div class="kpi-label">B19-Verkäufe bis Break-even</div><strong>${sourceBreakEvenAt?(sourceBreakEvenAt.counts[source.key]||0):'–'}</strong></div>
+      <div><div class="kpi-label">Verkäufe Start-Batch bis Break-even</div><strong>${sourceBreakEvenAt?(sourceBreakEvenAt.counts[source.key]||0):'–'}</strong></div>
     </div>
     <details><summary>Was wurde für die 1. AK gekauft?</summary>${salesGrowthStagePurchaseListHtml(sourcePurchase)}</details>
+    <details open><summary>Nachbestellungen bis zur Amortisation (${sourceReorders.length})</summary>
+      ${sourceReorders.length?`<div class="sales-reorder-list">${sourceReorders.map(x=>`<div class="sales-reorder-line"><span>Verkauf ${x.saleNumber}</span><span>${esc(x.id)} · ${esc(x.name)} · ${x.orderedQty} nachbestellt</span><strong>${euro(x.cost)}</strong></div>`).join('')}</div>`:'<div class="tiny">Keine Nachbestellungen bis zur Amortisation nötig.</div>'}
+    </details>
   </div>
 
   ${stageResults.map((r,idx)=>{
