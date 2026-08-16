@@ -46,18 +46,23 @@ function batchProductionPlan(b){
     remainingInventoryValue+=x.remainingValue
   });
 
-  // Wie viele Batches müssen insgesamt produziert/verkauft werden, bis jede Position aus der 1. AK
-  // mindestens einmal vollständig verbraucht wurde? Das ist die höchste "Reicht für"-Menge.
-  const maxSellThroughBatches=lines.length?Math.max(...lines.filter(x=>!x.missing).map(x=>Math.ceil(x.available/x.qty)),0):0;
+  // Sell-through-Ziel wird NUR vom Produktlager (PID) bestimmt.
+  // Verpackungsmaterialien (VID) dürfen das Ziel nicht künstlich erhöhen.
+  const validProductLines=productLines.filter(x=>!x.missing);
+  const maxSellThroughBatches=validProductLines.length
+    ? Math.max(...validProductLines.map(x=>Math.ceil(x.available/x.qty)),0)
+    : 0;
 
-  // Zusätzlicher Kapitalbedarf, um alle anderen Positionen auf diese Batchzahl hochzubestellen.
-  // Bestellungen erfolgen in ganzen Basis-Bestellmengen (MOQ/Set/Verbrauchspackung).
+  // Für diese PID-bestimmte Batchzahl werden weiterhin alle zusätzlich benötigten
+  // PIDs UND VIDs in ganzen MOQ-/Set-/Packungsschritten nachbestellt.
   let sellThroughTotalCapital=firstOrderCost,additionalCapitalToSellThrough=0;
   lines.forEach(x=>{
     if(x.missing)return;
     const required=maxSellThroughBatches*x.qty,
       extraNeeded=Math.max(0,required-x.available);
-    if(extraNeeded<=0){x.extraOrders=0;x.extraCapital=0;x.totalAvailableForSellThrough=x.available;return}
+    if(extraNeeded<=0){
+      x.extraOrders=0;x.extraCapital=0;x.totalAvailableForSellThrough=x.available;return
+    }
     const packs=Math.ceil(extraNeeded/x.available),
       extraCapital=packs*x.orderCost;
     x.extraOrders=packs;
@@ -93,12 +98,12 @@ function renderBatchProductionPlan(b){
     <div class="production-kpi"><div class="label">Mögliche vollständige Batches</div><div class="value">${p.possible}</div></div>
     <div class="production-kpi"><div class="label">Lagerbestand danach</div><div class="value">${euro(p.remainingInventoryValue)}</div></div>
     <div class="production-kpi"><div class="label">Engpass</div><div class="value" style="font-size:12px">${limiter}</div></div>
-    <div class="production-kpi"><div class="label">Max. Sell-through-Ziel</div><div class="value">${p.maxSellThroughBatches} Batches</div></div>
+    <div class="production-kpi"><div class="label">Max. Sell-through-Ziel (nur PID)</div><div class="value">${p.maxSellThroughBatches} Batches</div></div>
     <div class="production-kpi"><div class="label">Zusatzkapital bis dahin</div><div class="value">${euro(p.additionalCapitalToSellThrough)}</div></div>
     <div class="production-kpi"><div class="label">Gesamtkapital bis alles der 1. AK verbraucht ist</div><div class="value">${euro(p.sellThroughTotalCapital)}</div></div>
     <div class="production-kpi"><div class="label">Material-EK pro Batch</div><div class="value">${euro(p.unitBatchCost)}</div></div>
   </div>
-  <div class="tiny" style="margin-top:7px">„Lagerbestand danach“ bewertet den Restbestand nach Verkauf der ${p.possible} mit der ersten Bestellung direkt möglichen Batches zu den tatsächlichen Einstandskosten. Das Sell-through-Ziel nimmt die Position, die aus der 1. Bestellung für die meisten Batches reicht, und rechnet alle anderen PIDs/VIDs in ganzen MOQ-/Set-/Packungsschritten bis zu dieser Batchzahl hoch. So siehst du, wie viel zusätzliches Kapital nötig wäre, um den durch die 1. AK aufgebauten Bestand vollständig durch Batch-Verkäufe abzubauen.${p.missing?' Für mindestens eine Position fehlen Lieferantendaten.':''}</div>
+  <div class="tiny" style="margin-top:7px">„Lagerbestand danach“ bewertet den Restbestand nach Verkauf der ${p.possible} mit der ersten Bestellung direkt möglichen Batches zu den tatsächlichen Einstandskosten. Das Sell-through-Ziel wird ausschließlich durch die PIDs bestimmt: Es zeigt, wie viele Batches nötig sind, bis auch der größte Produktbestand aus der 1. Bestellung verbraucht ist. Für diese Batchzahl werden anschließend alle zusätzlich benötigten PIDs und VIDs in ganzen MOQ-/Set-/Packungsschritten hochgerechnet.${p.missing?' Für mindestens eine Position fehlen Lieferantendaten.':''}</div>
   ${productionLinesHtml(p.productLines,'Produkte (PID)')}${productionLinesHtml(p.packagingLines,'Verpackung (VID)')}`
 }
 function renderBatches(){
