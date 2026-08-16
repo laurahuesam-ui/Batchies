@@ -26,8 +26,8 @@ function renderShoppingSimulation(){
   if(!state.batches.length){results.innerHTML='<div class="muted">Noch keine Batches vorhanden.</div>';return}
   const rows=state.batches.map(b=>({b,gap:simulationBatchGap(b,cart),selected:cart.selected.has(b.key)||selected.has(b.bid)})).sort((a,b)=>Number(b.gap.possible)-Number(a.gap.possible)||a.gap.extraCost-b.gap.extraCost||a.gap.missing.length-b.gap.missing.length||parseIdNumber(a.b.bid,'BID')-parseIdNumber(b.b.bid,'BID'));
   results.innerHTML=`<div class="table-wrap"><table class="sim-result-table"><thead><tr><th>ID</th><th>Batch</th><th>Status / Fehlende Positionen</th><th>Zusätzlich nötig</th><th></th></tr></thead><tbody>${rows.map(({b,gap,selected})=>`<tr class="${gap.possible?'possible':''}"><td><span class="idchip">${esc(b.bid)}</span></td><td><div class="name">${esc(b.name)}</div>${selected?'<div class="tiny">ausgewählt</div>':''}</td><td>${gap.possible?'<span class="badge ready">✓ komplett möglich</span>':`<div><strong>${gap.missing.length} Position${gap.missing.length===1?'':'en'} fehlen</strong></div><div class="sim-missing">${gap.missing.map(m=>`<div class="missing-line"><span>${esc(m.id)} · ${esc(m.name)}</span><span>${m.missingSupplier?'kein Lieferant':euro(m.cost)}</span></div>`).join('')}</div>`}</td><td class="money ${gap.possible?'positive':''}">${gap.possible?'0,00 €':gap.missingSupplier?euro(gap.extraCost)+' + offen':euro(gap.extraCost)}</td><td>${selected?'':`<button type="button" class="btn secondary simulation-add-batch" data-key="${esc(b.key)}">+ mitbestellen</button>`}</td></tr>`).join('')}</tbody></table></div>`;
-  $$('.simulation-batch-check').forEach(c=>c.onchange=()=>{const set=new Set(state.simulationSelectedBatches||[]);c.checked?set.add(c.value):set.delete(c.value);state.simulationSelectedBatches=[...set];localStorage.setItem(STORAGE_KEY,JSON.stringify(state));renderShoppingSimulation()});
-  $$('.simulation-add-batch').forEach(btn=>btn.onclick=()=>{const set=new Set(state.simulationSelectedBatches||[]);set.add(btn.dataset.key);state.simulationSelectedBatches=[...set];localStorage.setItem(STORAGE_KEY,JSON.stringify(state));renderShoppingSimulation()});
+  $$('.simulation-batch-check').forEach(c=>c.onchange=()=>{const set=new Set(state.simulationSelectedBatches||[]);c.checked?set.add(c.value):set.delete(c.value);state.simulationSelectedBatches=[...set];localStorage.setItem(STORAGE_KEY,JSON.stringify(state));renderShoppingSimulation();if(typeof renderInventoryEditor==='function'){renderInventoryEditor();renderInventoryResults()}});
+  $$('.simulation-add-batch').forEach(btn=>btn.onclick=()=>{const set=new Set(state.simulationSelectedBatches||[]);set.add(btn.dataset.key);state.simulationSelectedBatches=[...set];localStorage.setItem(STORAGE_KEY,JSON.stringify(state));renderShoppingSimulation();if(typeof renderInventoryEditor==='function'){renderInventoryEditor();renderInventoryResults()}});
 }
 
 
@@ -51,9 +51,16 @@ function inventoryUnit(kind,id){
   }
   return 'Stk.'
 }
+function inventorySelectedBatchIds(){
+  const selectedIds=new Set(state.simulationSelectedBatches||[]);
+  return state.batches.filter(b=>selectedIds.has(b.key)||selectedIds.has(b.bid))
+}
 function inventoryUsedIds(){
   const ids=new Set();
-  state.batches.forEach(b=>{(b.items||[]).forEach(i=>ids.add(i.pid));(b.packagingItems||[]).forEach(i=>ids.add(i.vid))});
+  inventorySelectedBatchIds().forEach(b=>{
+    (b.items||[]).forEach(i=>{if(i.pid)ids.add(i.pid)});
+    (b.packagingItems||[]).forEach(i=>{if(i.vid)ids.add(i.vid)})
+  });
   return ids
 }
 function inventoryStockValue(id){ensureInventorySimulationState();return Math.max(0,num(state.inventorySimulation.stock[id]))}
@@ -69,6 +76,10 @@ function renderInventoryEditor(){
   ].filter(x=>(!only||used.has(x.id))&&(!q||(x.id+' '+x.name).toLowerCase().includes(q)));
 
   el.className='inventory-editor';
+  if(only&&!inventorySelectedBatchIds().length){
+    el.innerHTML='<div class="empty"><strong>Keine Batches ausgewählt</strong>Wähle oben in der Einkaufssimulation zuerst mindestens einen Batch aus.</div>';
+    return
+  }
   el.innerHTML=rows.map(x=>`<div class="inventory-row">
     <div><div class="inventory-id">${esc(x.id)}</div><div class="inventory-kind">${x.kind==='PID'?'Produkt':'Verpackung'}</div></div>
     <div>${esc(x.name)}</div>

@@ -74,7 +74,7 @@
 <body>
 <div class="app">
 <header class="topbar">
-  <div class="brand"><div class="logo">B</div><div><h1>Batchies</h1><div class="subtitle">Produktentwicklung & Stammdaten · v2.9.4</div></div></div>
+  <div class="brand"><div class="logo">B</div><div><h1>Batchies</h1><div class="subtitle">Produktentwicklung & Stammdaten · v2.9.5</div></div></div>
   <div class="actions"><button class="btn" id="exportBackupBtn">Backup</button><button class="btn" id="importBackupBtn">Import</button><button class="btn primary" id="addProductBtn">+ Produkt</button><button class="btn primary" id="addBatchBtn">+ Batch</button><input type="file" id="backupFile" accept="application/json" hidden></div>
 </header>
 <nav class="tabs"><button class="tab active" data-tab="overview">Übersicht</button><button class="tab" data-tab="products">Produkte</button><button class="tab" data-tab="packaging">Verpackung</button><button class="tab" data-tab="batches">Batches</button><button class="tab" data-tab="fees">Gebühren & Kalkulation</button><button class="tab" data-tab="investments">Investitionen</button><button class="tab" data-tab="simulation">Einkaufs-Simulation</button><button class="tab" data-tab="data">Stammdaten & CSV</button></nav>
@@ -125,7 +125,7 @@
   <div class="card span12"><h2 class="section-title">Welche Batches sind damit möglich?</h2><div class="muted" style="margin-bottom:12px">Grün markierte Batches sind mit dem virtuellen Warenkorb bereits vollständig möglich. Die übrigen sind nach geringster zusätzlicher Investition sortiert.</div><div id="simulationResults"></div></div>
   <div class="card span12">
     <div class="toolbar"><div><h2 class="section-title" style="margin-bottom:2px">Lager-Simulation</h2><div class="muted">Trage deinen tatsächlichen Bestand für alle PIDs und VIDs ein oder starte mit der jeweiligen 1. Bestellmenge. Batchies zeigt dir, welche Batches damit wie oft möglich sind und welche Artikel die Engpässe bilden.</div></div><div class="inline"><button class="btn" id="inventoryUseFirstOrderBtn" type="button">1. AK als Bestand</button><button class="btn secondary" id="inventoryUseSelectedSimulationBtn" type="button">1. AK aus Einkaufssimulation</button><button class="btn" id="inventoryZeroBtn" type="button">Alles auf 0</button><span id="inventoryActionStatus" class="tiny"></span></div></div>
-    <div class="inventory-tools"><input id="inventorySearch" class="search" placeholder="PID, VID oder Name suchen …"><label class="inventory-toggle"><input id="inventoryOnlyUsed" type="checkbox"> nur in Batches verwendete Artikel</label></div>
+    <div class="inventory-tools"><input id="inventorySearch" class="search" placeholder="PID, VID oder Name suchen …"><label class="inventory-toggle"><input id="inventoryOnlyUsed" type="checkbox"> nur Artikel der ausgewählten Batches</label></div>
     <div id="inventoryEditor"></div>
     <div id="inventorySimulationContent" style="margin-top:16px"></div>
   </div>
