@@ -92,17 +92,17 @@ function packagingPriceTierRowHtml(t={}){
     </div>
     <div class="pack-tier-field">
       <span class="supplier-mini-label pack-tier-price-label">${type==='set'?'Setpreis':'Stückpreis'}</span>
-      <input class="pack-tier-price" type="number" min="0" step="0.0001" value="${type==='set'?(setPrice||''):(num(t.unitPrice)||'')}" placeholder="${type==='set'?'z. B. 15,99':'€/Stück'}">
+      <input class="pack-tier-price" type="number" min="0" step="0.0001" value="${type==='set'?(setPrice||''):(num(t.unitPrice)||'')}" placeholder="${type==='set'?'z. B. 13,99':'€/Stück'}">
     </div>
     <div class="pack-tier-field pack-tier-set-field ${type==='set'?'':'hidden'}">
       <span class="supplier-mini-label">Stück im Set</span>
-      <input class="pack-tier-set-qty" type="number" min="1" step="1" value="${setQty}" placeholder="z. B. 10">
+      <input class="pack-tier-set-qty" type="number" min="1" step="1" value="${setQty}" placeholder="z. B. 25">
     </div>
     <div class="pack-tier-field">
       <span class="supplier-mini-label">Preis/Stück</span>
-      <input class="pack-tier-unit-display" type="text" value="${unit?euro(unit):'–'}" readonly title="Effektiver Preis/Stück dieser Staffel">
+      <input class="pack-tier-unit-display" type="text" value="${unit?euro(unit):'–'}" readonly>
     </div>
-    <div class="pack-tier-remove"><span class="supplier-mini-label">&nbsp;</span><button type="button" class="iconbtn remove-packaging-price-tier">✕</button></div>
+    <div class="pack-tier-remove"><button type="button" class="iconbtn remove-packaging-price-tier">✕</button></div>
   </div>`
 }
 function packagingShippingPointRowHtml(s={}){
