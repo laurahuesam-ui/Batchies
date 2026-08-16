@@ -1,10 +1,9 @@
-function renderAll(){renderOverview();renderProducts();renderPackaging();renderBatches();renderBatchSuggestions();renderSettings();renderInvestments();renderShoppingSimulation()}
+function renderAll(){renderOverview();renderProducts();renderPackaging();renderBatches();renderBatchSuggestions();renderSettings();renderInvestments();renderShoppingSimulation();try{if(typeof renderInventorySimulation==='function')renderInventorySimulation()}catch(err){console.error('Lager-Simulation:',err)}}
 function productIsCalculable(p){
   const s=(p?.suppliers||[]).find(x=>x.preferred)||(p?.suppliers||[])[0];
   if(!s)return false;
   const unit=supplierLandedUnitCost(s);
   return Number.isFinite(unit)&&unit>0
-  try{if(typeof renderInventorySimulation==='function')renderInventorySimulation()}catch(err){console.error('Lager-Simulation:',err)}
 }
 function packagingIsCalculable(v){
   const s=(v?.suppliers||[]).find(x=>x.preferred)||(v?.suppliers||[])[0];
