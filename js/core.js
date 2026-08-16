@@ -8,27 +8,43 @@ function normalizeText(t){return String(t||'').toLowerCase().normalize('NFD').re
 function isAlibabaSupplierName(name){return normalizeText(name).includes('alibaba')}
 function displayId(prefix,n){return prefix+'-'+String(n).padStart(4,'0')}
 function parseIdNumber(v,prefix){const m=String(v||'').match(new RegExp('^'+prefix+'-(\\d+)$'));return m?num(m[1]):0}
+function mergeRecoveryArray(recovery,current,idField){
+  const out=(Array.isArray(recovery)?recovery:[]).map(x=>structuredClone(x));
+  (Array.isArray(current)?current:[]).forEach(x=>{
+    const id=x?.[idField]||x?.key;
+    const idx=out.findIndex(y=>(y?.[idField]||y?.key)===id);
+    if(idx<0){out.push(structuredClone(x));return}
+    const base=out[idx],merged={...base,...structuredClone(x)};
+    if(Array.isArray(base.suppliers)||Array.isArray(x.suppliers)){
+      const sm=new Map((base.suppliers||[]).map(s=>[s.id,structuredClone(s)]));
+      (x.suppliers||[]).forEach(s=>{
+        if(s.id&&sm.has(s.id))sm.set(s.id,{...sm.get(s.id),...structuredClone(s)});
+        else sm.set(s.id||crypto.randomUUID(),structuredClone(s))
+      });
+      merged.suppliers=[...sm.values()]
+    }
+    out[idx]=merged
+  });
+  return out
+}
 function loadState(){
   let raw=null;
-  try{raw=JSON.parse(localStorage.getItem(STORAGE_KEY))}catch(err){console.error('Batchies: gespeicherte Daten konnten nicht gelesen werden',err)}
-  const s=raw?{
-    ...structuredClone(defaultState),
-    ...raw,
-    settings:{...defaultState.settings,...raw.settings},
-    counters:{...defaultState.counters,...raw.counters},
-    categoryLearning:{...defaultState.categoryLearning,...raw.categoryLearning}
-  }:structuredClone(defaultState);
-  try{migrateState(s)}catch(err){
-    // Niemals gültige Stammdaten wegen eines Migrationsfehlers verwerfen.
-    console.error('Batchies: Migration fehlgeschlagen – vorhandene Daten bleiben erhalten',err)
-    s.products=Array.isArray(s.products)?s.products:[];
-    s.packaging=Array.isArray(s.packaging)?s.packaging:[];
-    s.batches=Array.isArray(s.batches)?s.batches:[];
-    s.investments=Array.isArray(s.investments)?s.investments:[];
-  }
+  try{raw=JSON.parse(localStorage.getItem(STORAGE_KEY))}catch(err){console.error('LocalStorage unlesbar; Recovery wird verwendet.',err)}
+  const recovery=typeof RECOVERY_STATE!=='undefined'?structuredClone(RECOVERY_STATE):structuredClone(defaultState);
+  const current=raw&&typeof raw==='object'?structuredClone(raw):{};
+  const s={
+    ...structuredClone(defaultState),...recovery,...current,
+    settings:{...defaultState.settings,...(recovery.settings||{}),...(current.settings||{})},
+    counters:{...defaultState.counters,...(recovery.counters||{}),...(current.counters||{})},
+    categoryLearning:{...defaultState.categoryLearning,...(recovery.categoryLearning||{}),...(current.categoryLearning||{})}
+  };
+  s.products=mergeRecoveryArray(recovery.products,current.products,'pid');
+  s.packaging=mergeRecoveryArray(recovery.packaging,current.packaging,'vid');
+  s.batches=mergeRecoveryArray(recovery.batches,current.batches,'bid');
+  s.investments=mergeRecoveryArray(recovery.investments,current.investments,'key');
+  try{migrateState(s)}catch(err){console.error('Migration fehlgeschlagen; Recovery bleibt erhalten.',err)}
   return s
 }
-
 function migrateAlibabaCustomsOnce(state){
   if(!state || state.alibabaCustomsMigrationV246) return state;
   (state.products || []).forEach(p => {
@@ -40,29 +56,7 @@ function migrateAlibabaCustomsOnce(state){
   return state;
 }
 
-function migrateState(s){s.products=Array.isArray(s.products)?s.products:[];s.packaging=Array.isArray(s.packaging)?s.packaging:[];s.batches=Array.isArray(s.batches)?s.batches:[];s.investments=Array.isArray(s.investments)?s.investments:[];s.simulationSelectedBatches=Array.isArray(s.simulationSelectedBatches)?s.simulationSelectedBatches.filter(x=>typeof x==='string'):[];s.investments=s.investments.map(x=>({key:x.key||crypto.randomUUID(),type:String(x.type||x.name||''),url:String(x.url||''),cost:num(x.cost??x.amount)}));let maxP=num(s.counters?.product),maxV=num(s.counters?.packaging),maxB=num(s.counters?.batch);s.products.forEach((p,i)=>{if(!p.key)p.key=p.id||crypto.randomUUID();let n=parseIdNumber(p.pid,'PID');if(!n){n=++maxP;p.pid=displayId('PID',n)}else maxP=Math.max(maxP,n);if(!Array.isArray(p.suppliers)){p.suppliers=[];if(p.url)p.suppliers.push({id:crypto.randomUUID(),name:'Fundstelle',url:p.url,price:num(p.basePrice),imageUrl:'',preferred:true})}if(p.basePrice===undefined)p.basePrice=0;p.suppliers=p.suppliers.map((x,j)=>{
-  const priceType=x.priceType==='set'?'set':'unit',
-    setQty=Math.max(1,num(x.setQty,1)),
-    setPrice=num(x.setPrice,priceType==='set'?num(x.price)*setQty:0),
-    price=priceType==='set'?setPrice/setQty:num(x.price);
-  return{
-    ...x,
-    id:x.id||crypto.randomUUID(),
-    name:x.name||'Lieferant '+(j+1),
-    url:x.url||'',
-    priceType,
-    price,
-    minOrderQty:priceType==='unit'?Math.max(1,num(x.minOrderQty,1)):1,
-    setPrice:priceType==='set'?setPrice:0,
-    setQty:priceType==='set'?setQty:1,
-    totalShipping:num(x.totalShipping),
-    imageUrl:x.imageUrl||'',
-    customs:!!x.customs,
-    preferred:!!x.preferred,
-    priceTiers:Array.isArray(x.priceTiers)?x.priceTiers.map(t=>({...t,minQty:Math.max(1,num(t.minQty,1)),maxQty:num(t.maxQty)||null,unitPrice:num(t.unitPrice)})):[],
-    shippingPoints:Array.isArray(x.shippingPoints)?x.shippingPoints.map(q=>({...q,qty:Math.max(1,num(q.qty,1)),shipping:num(q.shipping),shippingWithCustoms:num(q.shippingWithCustoms)})):[]
-  }
-});if(p.suppliers.length&&!p.suppliers.some(x=>x.preferred))p.suppliers[0].preferred=true;p.imageUrl=p.imageUrl||'';p.imageData=p.imageData||'';p.colors=normalizeProductColors(p.colors);p.baseColors=normalizeBaseColors(p.baseColors,p.colors)});
+function migrateState(s){s.products=Array.isArray(s.products)?s.products:[];s.packaging=Array.isArray(s.packaging)?s.packaging:[];s.batches=Array.isArray(s.batches)?s.batches:[];s.investments=Array.isArray(s.investments)?s.investments:[];s.simulationSelectedBatches=Array.isArray(s.simulationSelectedBatches)?s.simulationSelectedBatches.filter(x=>typeof x==='string'):[];s.investments=s.investments.map(x=>({key:x.key||crypto.randomUUID(),type:String(x.type||x.name||''),url:String(x.url||''),cost:num(x.cost??x.amount)}));let maxP=num(s.counters?.product),maxV=num(s.counters?.packaging),maxB=num(s.counters?.batch);s.products.forEach((p,i)=>{if(!p.key)p.key=p.id||crypto.randomUUID();let n=parseIdNumber(p.pid,'PID');if(!n){n=++maxP;p.pid=displayId('PID',n)}else maxP=Math.max(maxP,n);if(!Array.isArray(p.suppliers)){p.suppliers=[];if(p.url)p.suppliers.push({id:crypto.randomUUID(),name:'Fundstelle',url:p.url,price:num(p.basePrice),imageUrl:'',preferred:true})}if(p.basePrice===undefined)p.basePrice=0;p.suppliers=p.suppliers.map((x,j)=>{const priceType=x.priceType==='set'?'set':'unit',setQty=Math.max(1,num(x.setQty,1)),setPrice=num(x.setPrice,priceType==='set'?num(x.price)*setQty:0),price=priceType==='set'?setPrice/setQty:num(x.price);return{...x,id:x.id||crypto.randomUUID(),name:x.name||'Lieferant '+(j+1),url:x.url||'',priceType,price,minOrderQty:priceType==='unit'?Math.max(1,num(x.minOrderQty,1)):1,setPrice:priceType==='set'?setPrice:0,setQty:priceType==='set'?setQty:1,totalShipping:num(x.totalShipping),imageUrl:x.imageUrl||'',customs:!!x.customs,preferred:!!x.preferred,priceTiers:Array.isArray(x.priceTiers)?x.priceTiers:[],shippingPoints:Array.isArray(x.shippingPoints)?x.shippingPoints:[]}});if(p.suppliers.length&&!p.suppliers.some(x=>x.preferred))p.suppliers[0].preferred=true;p.imageUrl=p.imageUrl||'';p.imageData=p.imageData||'';p.colors=normalizeProductColors(p.colors);p.baseColors=normalizeBaseColors(p.baseColors,p.colors)});
 s.packaging.forEach((v,i)=>{
   if(!v.key)v.key=v.id||crypto.randomUUID();
   let n=parseIdNumber(v.vid,'VID');
@@ -75,27 +69,12 @@ s.packaging.forEach((v,i)=>{
       setQty=Math.max(1,num(x.setQty,1)),
       setPrice=num(x.setPrice,priceType==='set'?num(x.price)*setQty:0),
       price=priceType==='set'?setPrice/setQty:(priceType==='consumable'?0:num(x.price));
-    return{
-      ...x,
-      id:x.id||crypto.randomUUID(),
-      name:x.name||'Lieferant '+(j+1),
-      url:x.url||'',
-      priceType,
-      price,
+    return{...x,id:x.id||crypto.randomUUID(),name:x.name||'Lieferant '+(j+1),url:x.url||'',priceType,price,
       minOrderQty:priceType==='unit'?Math.max(1,num(x.minOrderQty,1)):1,
-      setPrice:priceType==='set'?setPrice:0,
-      setQty:priceType==='set'?setQty:1,
-      purchasePrice:priceType==='consumable'?num(x.purchasePrice,num(x.setPrice,num(x.price))):num(x.purchasePrice),
-      packageCount:priceType==='consumable'?Math.max(1,num(x.packageCount,1)):Math.max(1,num(x.packageCount,1)),
-      amountPerPackage:priceType==='consumable'?Math.max(0.0001,num(x.amountPerPackage,1)):Math.max(0.0001,num(x.amountPerPackage,1)),
-      consumptionUnit:x.consumptionUnit||'m',
-      totalShipping:num(x.totalShipping),
-      imageUrl:x.imageUrl||'',
-      customs:!!x.customs,
-      preferred:!!x.preferred,
-      priceTiers:Array.isArray(x.priceTiers)?x.priceTiers:[],
-      shippingPoints:Array.isArray(x.shippingPoints)?x.shippingPoints:[]
-    }
+      setPrice:priceType==='set'?setPrice:0,setQty:priceType==='set'?setQty:1,
+      purchasePrice:num(x.purchasePrice),packageCount:Math.max(1,num(x.packageCount,1)),
+      amountPerPackage:Math.max(0.0001,num(x.amountPerPackage,1)),consumptionUnit:x.consumptionUnit||'m',
+      totalShipping:num(x.totalShipping),imageUrl:x.imageUrl||'',customs:!!x.customs,preferred:!!x.preferred}
   });
   if(v.suppliers.length&&!v.suppliers.some(x=>x.preferred))v.suppliers[0].preferred=true;
   v.notes=String(v.notes||'');

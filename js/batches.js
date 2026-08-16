@@ -151,10 +151,8 @@ function liveBatchCalc(){
       qtyInput=r.querySelector('.batch-packaging-qty'),
       costEl=r.querySelector('.batch-packaging-line-cost');
     if(!packagingSelect||!costEl)return;
-    const x=state.packaging.find(v=>v.vid===packagingSelect.value),
-      s=preferredPackagingSupplier(x),
-      q=Math.max(0.001,num(qtyInput?.value,1)),
-      unitEl=r.querySelector('.batch-packaging-unit');
+    const x=state.packaging.find(v=>v.vid===packagingSelect.value),s=preferredPackagingSupplier(x),
+      q=Math.max(0.001,num(qtyInput?.value,1)),unitEl=r.querySelector('.batch-packaging-unit');
     if(unitEl)unitEl.textContent=s?.priceType==='consumable'?(s.consumptionUnit||'Einheit'):'Stk.';
     if(qtyInput){qtyInput.step=s?.priceType==='consumable'?'0.01':'1';qtyInput.min=s?.priceType==='consumable'?'0.001':'1'}
     costEl.textContent=euro(x?packagingPurchaseCost(x)*q:0)
