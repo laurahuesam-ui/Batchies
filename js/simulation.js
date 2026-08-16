@@ -64,6 +64,32 @@ function inventoryUsedIds(){
   return ids
 }
 function inventoryStockValue(id){ensureInventorySimulationState();return Math.max(0,num(state.inventorySimulation.stock[id]))}
+function inventoryUnitLandedCost(kind,id){
+  if(kind==='PID'){
+    const x=state.products.find(p=>p.pid===id),
+      s=(x?.suppliers||[]).find(z=>z.preferred)||(x?.suppliers||[])[0];
+    if(!s)return 0;
+    const qty=supplierQtyBase(s),cost=supplierOrderCost(s);
+    return qty>0?cost/qty:0
+  }
+  const x=state.packaging.find(v=>v.vid===id),s=preferredPackagingSupplier(x);
+  if(!s)return 0;
+  const qty=supplierQtyBase(s),cost=supplierOrderCost(s);
+  return qty>0?cost/qty:0
+}
+function inventoryCurrentTotals(){
+  ensureInventorySimulationState();
+  let pidValue=0,vidValue=0,pidPositions=0,vidPositions=0;
+  state.products.forEach(p=>{
+    const qty=inventoryStockValue(p.pid);
+    if(qty>0){pidPositions++;pidValue+=qty*inventoryUnitLandedCost('PID',p.pid)}
+  });
+  state.packaging.forEach(v=>{
+    const qty=inventoryStockValue(v.vid);
+    if(qty>0){vidPositions++;vidValue+=qty*inventoryUnitLandedCost('VID',v.vid)}
+  });
+  return{pidValue,vidValue,total:pidValue+vidValue,pidPositions,vidPositions}
+}
 function saveInventorySimulation(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(state))}catch(err){console.error('Lager-Simulation speichern:',err)}}
 
 function renderInventoryEditor(){
@@ -101,9 +127,13 @@ function renderInventoryResults(){
   const rows=state.batches.map(b=>({b,...inventoryBatchCapacity(b)})).sort((a,b)=>b.capacity-a.capacity||a.b.bid.localeCompare(b.b.bid,'de',{numeric:true})),
     possible=rows.filter(x=>x.capacity>0),
     maxCap=rows.length?Math.max(...rows.map(x=>x.capacity)):0,
-    best=rows.filter(x=>x.capacity===maxCap&&maxCap>0).map(x=>x.b.bid).join(', ')||'–';
+    best=rows.filter(x=>x.capacity===maxCap&&maxCap>0).map(x=>x.b.bid).join(', ')||'–',
+    totals=inventoryCurrentTotals();
 
   el.innerHTML=`<div class="inventory-summary">
+    <div class="production-kpi"><div class="label">Wert ausgewählte Produkte (PID)</div><div class="value">${euro(totals.pidValue)}</div><div class="tiny">${totals.pidPositions} Positionen</div></div>
+    <div class="production-kpi"><div class="label">Wert ausgewählte Verpackung (VID)</div><div class="value">${euro(totals.vidValue)}</div><div class="tiny">${totals.vidPositions} Positionen</div></div>
+    <div class="production-kpi"><div class="label">Summe Lager / 1. AK</div><div class="value">${euro(totals.total)}</div></div>
     <div class="production-kpi"><div class="label">Batches mindestens 1× möglich</div><div class="value">${possible.length} / ${rows.length}</div></div>
     <div class="production-kpi"><div class="label">Höchste Reichweite</div><div class="value">${maxCap}×</div></div>
     <div class="production-kpi"><div class="label">Beste Reichweite</div><div class="value" style="font-size:13px">${esc(best)}</div></div>
