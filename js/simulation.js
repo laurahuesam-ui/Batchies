@@ -498,13 +498,15 @@ function renderSalesGrowthSimulation(){
       if(!oneSale())break
     }
 
-    const funded=cash+1e-9>=purchase.total&&!purchase.missing;
+    const funded=cash+1e-9>=purchase.total&&!purchase.missing,
+      countsBeforePurchase=Object.fromEntries(counts);
+
     if(funded){
       cash-=purchase.total;
       salesGrowthAddStock(stock,purchase);
       active.push(target);
       counts.set(target.key,counts.get(target.key)||0);
-      // round-robin resets naturally into enlarged active list
+      // Ab jetzt ist das neue Batch aktiv und wird ab der nächsten Verkaufsrunde mitverkauft.
     }
 
     stageResults.push({
@@ -513,7 +515,8 @@ function renderSalesGrowthSimulation(){
       totalSales,
       cashBeforePurchase:funded?cash+purchase.total:cash,
       cashAfterPurchase:cash,
-      counts:Object.fromEntries(counts),
+      countsBeforePurchase,
+      activeAfterPurchase:active.map(b=>b.key),
       reorders:reorders.slice(reorderStart)
     });
     if(!funded)break
@@ -544,21 +547,29 @@ function renderSalesGrowthSimulation(){
   </div>
 
   ${stageResults.map((r,idx)=>{
-    const activeCounts=Object.entries(r.counts).map(([key,n])=>{
-      const b=state.batches.find(x=>x.key===key);return b?`<span class="badge">${esc(b.bid)}: ${n}</span>`:''
+    const financingCounts=Object.entries(r.countsBeforePurchase).map(([key,n])=>{
+      const b=state.batches.find(x=>x.key===key);
+      return b?`<span class="badge">${esc(b.bid)}: ${n} Verkäufe gesamt</span>`:''
+    }).join('');
+    const activeAfter=(r.activeAfterPurchase||[]).map(key=>{
+      const b=state.batches.find(x=>x.key===key);
+      return b?`<span class="badge ready">${esc(b.bid)} aktiv</span>`:''
     }).join('');
     return `<div class="sales-chain-stage ${r.funded?'done':''}">
       <div class="sales-chain-stage-head">
-        <div><div class="sales-chain-stage-title">Stufe ${idx+1} · ${esc(r.target.bid)} · ${esc(r.target.name)}</div><div class="tiny">Finanziert durch alle bis dahin aktiven Batches</div></div>
-        <span class="badge ${r.funded?'ready':''}">${r.funded?'✓ finanziert':'noch nicht finanziert'}</span>
+        <div><div class="sales-chain-stage-title">Stufe ${idx+1} · ${esc(r.target.bid)} · ${esc(r.target.name)}</div><div class="tiny">Bis zum Kauf durch die bereits aktiven Batches finanziert; danach wird ${esc(r.target.bid)} sofort mitverkauft.</div></div>
+        <span class="badge ${r.funded?'ready':''}">${r.funded?'✓ finanziert & aktiv':'noch nicht finanziert'}</span>
       </div>
       <div class="sales-chain-kpis">
         <div><div class="kpi-label">1. AK Ziel</div><strong>${euro(r.purchase.total)}</strong></div>
-        <div><div class="kpi-label">Zusätzliche Verkäufe bis Ziel</div><strong>${r.salesDuringStage}</strong></div>
-        <div><div class="kpi-label">Gesamtverkäufe bis Ziel</div><strong>${r.totalSales}</strong></div>
-        <div><div class="kpi-label">Freies Geld nach Kauf</div><strong>${euro(r.cashAfterPurchase)}</strong></div>
+        <div><div class="kpi-label">Zusätzliche Verkäufe bis Kauf</div><strong>${r.salesDuringStage}</strong></div>
+        <div><div class="kpi-label">Gesamtverkäufe bis Kauf</div><strong>${r.totalSales}</strong></div>
+        <div><div class="kpi-label">Freies Geld direkt nach Kauf</div><strong>${euro(r.cashAfterPurchase)}</strong></div>
       </div>
-      <div class="sales-active-counts">${activeCounts}</div>
+      <div class="tiny" style="margin-top:8px"><strong>Diese Batches haben das Ziel finanziert:</strong></div>
+      <div class="sales-active-counts">${financingCounts||'<span class="tiny">–</span>'}</div>
+      <div class="tiny" style="margin-top:8px"><strong>Ab jetzt aktiv für die nächste Stufe:</strong></div>
+      <div class="sales-active-counts">${activeAfter||'<span class="tiny">–</span>'}</div>
       <details open><summary>Was muss für ${esc(r.target.bid)} gekauft werden?</summary>${salesGrowthStagePurchaseListHtml(r.purchase)}</details>
       <details><summary>Nachbestellungen während dieser Stufe (${r.reorders.length})</summary>
         ${r.reorders.length?`<div class="sales-reorder-list">${r.reorders.map(x=>`<div class="sales-reorder-line"><span>Verkauf ${x.saleNumber}</span><span>${esc(x.id)} · ${esc(x.name)} · ${x.orderedQty} nachbestellt</span><strong>${euro(x.cost)}</strong></div>`).join('')}</div>`:'<div class="tiny">Keine Nachbestellungen nötig.</div>'}
@@ -566,7 +577,7 @@ function renderSalesGrowthSimulation(){
     </div>`
   }).join('')}
 
-  <div class="tiny" style="margin-top:10px">Modellannahme: Sobald mehrere Batches aktiv sind, werden sie reihum verkauft. Dadurch erhältst du eine neutrale gemeinsame Wachstumssimulation. Materialkosten werden als echte Bestellungen verbucht, nicht als geglätteter EK pro Verkauf; Arbeitszeit, Etsy-Gebühren, Werbung/Risiko, Kundenversand und Fixkosten-Umlage werden pro Verkauf berücksichtigt.</div>`
+  <div class="tiny" style="margin-top:10px">Modellannahme: Ein neues Ziel-Batch wird bis zu seinem Kauf von den bereits aktiven Batches finanziert. <strong>Sofort nach dem Kauf wird es selbst aktiv und ab der nächsten Verkaufsrunde mitverkauft.</strong> Sobald mehrere Batches aktiv sind, werden sie reihum verkauft. Materialkosten werden als echte Bestellungen verbucht, nicht als geglätteter EK pro Verkauf; Arbeitszeit, Etsy-Gebühren, Werbung/Risiko, Kundenversand und Fixkosten-Umlage werden pro Verkauf berücksichtigt.</div>`
 }
 function initSalesSimulation(){
   const source=$('#salesSimSource'),add=$('#salesSimAddStageBtn'),suggest=$('#salesSimSuggestBtn');
