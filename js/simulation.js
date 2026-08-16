@@ -123,6 +123,71 @@ function applyInventoryFirstOrder(){
   const status=$('#inventoryActionStatus');
   if(status)status.textContent='✓ 1. AK übernommen ('+changed+' Positionen)';
 }
+
+function applyInventoryFromSelectedShoppingSimulation(){
+  ensureInventorySimulationState();
+
+  const selected=(state.simulationSelectedBatches||[])
+    .map(id=>state.batches.find(b=>b.bid===id))
+    .filter(Boolean);
+
+  const status=$('#inventoryActionStatus');
+
+  if(!selected.length){
+    if(status)status.textContent='⚠ Keine Batches in der Einkaufssimulation ausgewählt';
+    return
+  }
+
+  const pidNeed=new Map(),vidNeed=new Map();
+
+  selected.forEach(b=>{
+    (b.items||[]).forEach(i=>{
+      if(!i.pid)return;
+      pidNeed.set(i.pid,(pidNeed.get(i.pid)||0)+Math.max(1,num(i.qty,1)))
+    });
+    (b.packagingItems||[]).forEach(i=>{
+      if(!i.vid)return;
+      vidNeed.set(i.vid,(vidNeed.get(i.vid)||0)+Math.max(.001,num(i.qty,1)))
+    })
+  });
+
+  // Start bewusst leer: Nur Artikel der ausgewählten Batches werden übernommen.
+  state.inventorySimulation.stock={};
+
+  let positions=0;
+
+  pidNeed.forEach((needed,id)=>{
+    const p=state.products.find(x=>x.pid===id),
+      s=(p?.suppliers||[]).find(x=>x.preferred)||(p?.suppliers||[])[0];
+    if(!s)return;
+    const base=Math.max(.001,supplierQtyBase(s)),
+      packs=Math.ceil(needed/base),
+      ordered=packs*base;
+    state.inventorySimulation.stock[id]=ordered;
+    positions++
+  });
+
+  vidNeed.forEach((needed,id)=>{
+    const v=state.packaging.find(x=>x.vid===id),
+      s=preferredPackagingSupplier(v);
+    if(!s)return;
+    const base=Math.max(.001,supplierQtyBase(s)),
+      packs=Math.ceil(needed/base),
+      ordered=packs*base;
+    state.inventorySimulation.stock[id]=ordered;
+    positions++
+  });
+
+  saveInventorySimulation();
+  renderInventoryEditor();
+  renderInventoryResults();
+
+  if(status){
+    status.textContent='✓ 1. AK für '+selected.length+' ausgewählte Batch'+(selected.length===1?'':'es')+' übernommen ('+positions+' Positionen)'
+  }
+}
+window.applyInventoryFromSelectedShoppingSimulation=applyInventoryFromSelectedShoppingSimulation;
+
 function clearInventorySimulationStock(){
   ensureInventorySimulationState();
   state.inventorySimulation.stock={};
@@ -140,9 +205,10 @@ function renderInventorySimulation(){
   ensureInventorySimulationState();
   renderInventoryEditor();
   renderInventoryResults();
-  const search=$('#inventorySearch'),only=$('#inventoryOnlyUsed'),first=$('#inventoryUseFirstOrderBtn'),zero=$('#inventoryZeroBtn');
+  const search=$('#inventorySearch'),only=$('#inventoryOnlyUsed'),first=$('#inventoryUseFirstOrderBtn'),selectedFirst=$('#inventoryUseSelectedSimulationBtn'),zero=$('#inventoryZeroBtn');
   if(search)search.oninput=renderInventoryEditor;
   if(only)only.onchange=renderInventoryEditor;
   if(first)first.onclick=applyInventoryFirstOrder;
+  if(selectedFirst)selectedFirst.onclick=applyInventoryFromSelectedShoppingSimulation;
   if(zero)zero.onclick=clearInventorySimulationStock;
 }
