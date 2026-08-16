@@ -8,7 +8,7 @@ function sortBatchPackagingByVid(items){return [...(items||[])].sort((a,b)=>pars
 function batchProductionPlan(b){
   const pg=new Map(),vg=new Map();
   (b.items||[]).forEach(i=>{if(i.pid)pg.set(i.pid,(pg.get(i.pid)||0)+Math.max(1,num(i.qty,1)))});
-  (b.packagingItems||[]).forEach(i=>{if(i.vid)vg.set(i.vid,(vg.get(i.vid)||0)+Math.max(1,num(i.qty,1)))});
+  (b.packagingItems||[]).forEach(i=>{if(i.vid)vg.set(i.vid,(vg.get(i.vid)||0)+Math.max(0.001,num(i.qty,1)))});
   const productLines=[],packagingLines=[];let firstOrderCost=0,possible=Infinity,missing=false;
   pg.forEach((qty,id)=>{const x=state.products.find(p=>p.pid===id),s=(x?.suppliers||[]).find(z=>z.preferred)||(x?.suppliers||[])[0];if(!x||!s){missing=true;productLines.push({id,name:x?.name||'Produkt fehlt',qty,available:0,orderCost:0,batches:0,missing:true});possible=0;return}const available=supplierQtyBase(s),orderCost=supplierOrderCost(s),count=Math.floor(available/qty);firstOrderCost+=orderCost;possible=Math.min(possible,count);productLines.push({id,name:x.name,qty,available,orderCost,batches:count,missing:false})});
   vg.forEach((qty,id)=>{const x=state.packaging.find(v=>v.vid===id),s=preferredPackagingSupplier(x);if(!x||!s){missing=true;packagingLines.push({id,name:x?.name||'Verpackung fehlt',qty,available:0,orderCost:0,batches:0,missing:true});possible=0;return}const available=supplierQtyBase(s),orderCost=supplierOrderCost(s),count=Math.floor(available/qty);firstOrderCost+=orderCost;possible=Math.min(possible,count);packagingLines.push({id,name:x.name,qty,available,orderCost,batches:count,missing:false})});
@@ -85,7 +85,7 @@ function renderBatchPackagingRows(items){
   const clean=sortBatchPackagingByVid(Array.isArray(items)?items:[]);
   const opts='<option value="">Verpackung wählen …</option>'+state.packaging.map(v=>`<option value="${esc(v.vid)}">${esc(v.vid)} · ${esc(v.name)}</option>`).join('');
   const shown=clean.length?clean:[{vid:'',qty:1}];
-  $('#batchPackagingRows').innerHTML=shown.map(i=>`<div class="batch-packaging-row"><select class="batch-packaging">${opts}</select><input class="batch-packaging-qty" type="number" min="1" step="1" value="${Math.max(1,num(i?.qty,1))}"><div class="money batch-packaging-line-cost">0,00 €</div><button type="button" class="iconbtn remove-batch-packaging">✕</button></div>`).join('');
+  $('#batchPackagingRows').innerHTML=shown.map(i=>`<div class="batch-packaging-row"><select class="batch-packaging">${opts}</select><div class="batch-packaging-usage-wrap"><input class="batch-packaging-qty" type="number" min="0.001" step="0.01" value="${Math.max(0.001,num(i?.qty,1))}"><span class="batch-packaging-unit">Stk.</span></div><div class="money batch-packaging-line-cost">0,00 €</div><button type="button" class="iconbtn remove-batch-packaging">✕</button></div>`).join('');
   $$('#batchPackagingRows .batch-packaging-row').forEach((r,idx)=>{
     const select=r.querySelector('.batch-packaging');
     if(!select)return;
@@ -116,7 +116,7 @@ function collectBatchDraft(){
   }).filter(i=>i&&i.pid);
   const packagingItems=$$('#batchPackagingRows .batch-packaging-row').map(r=>{
     const packaging=r.querySelector('.batch-packaging'),qty=r.querySelector('.batch-packaging-qty');
-    return packaging?{vid:packaging.value,qty:Math.max(1,num(qty?.value,1))}:null
+    return packaging?{vid:packaging.value,qty:Math.max(0.001,num(qty?.value,1))}:null
   }).filter(i=>i&&i.vid);
   return{
     key:$('#batchKey').value||crypto.randomUUID(),
@@ -152,7 +152,11 @@ function liveBatchCalc(){
       costEl=r.querySelector('.batch-packaging-line-cost');
     if(!packagingSelect||!costEl)return;
     const x=state.packaging.find(v=>v.vid===packagingSelect.value),
-      q=Math.max(1,num(qtyInput?.value,1));
+      s=preferredPackagingSupplier(x),
+      q=Math.max(0.001,num(qtyInput?.value,1)),
+      unitEl=r.querySelector('.batch-packaging-unit');
+    if(unitEl)unitEl.textContent=s?.priceType==='consumable'?(s.consumptionUnit||'Einheit'):'Stk.';
+    if(qtyInput){qtyInput.step=s?.priceType==='consumable'?'0.01':'1';qtyInput.min=s?.priceType==='consumable'?'0.001':'1'}
     costEl.textContent=euro(x?packagingPurchaseCost(x)*q:0)
   });
 

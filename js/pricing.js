@@ -1,11 +1,11 @@
 function variableFeeRate(p){const s=state.settings;let r=(s.transactionPct+s.paymentPct)/100;if(p?.useOffsite)r+=s.offsitePct/100;if(p?.useCurrency)r+=s.currencyPct/100;return r}
 function fixedFees(p){const s=state.settings;let f=s.listingFee+s.paymentFixed;if(p?.useSetup&&s.setupSales>0)f+=s.setupFee/s.setupSales;return f}
-function supplierQtyBase(s){if(!s)return 1;return s.priceType==='set'?Math.max(1,num(s.setQty,1)):Math.max(1,num(s.minOrderQty,1))}
-function supplierUnitPrice(s){if(!s)return 0;if(s.priceType==='set')return num(s.setPrice)/Math.max(1,num(s.setQty,1));return num(s.price)}
+function supplierQtyBase(s){if(!s)return 1;if(s.priceType==='consumable')return Math.max(0.0001,num(s.packageCount,1)*num(s.amountPerPackage,1));return s.priceType==='set'?Math.max(1,num(s.setQty,1)):Math.max(1,num(s.minOrderQty,1))}
+function supplierUnitPrice(s){if(!s)return 0;if(s.priceType==='consumable')return num(s.purchasePrice)/supplierQtyBase(s);if(s.priceType==='set')return num(s.setPrice)/Math.max(1,num(s.setQty,1));return num(s.price)}
 function supplierTierUnitPrice(s,qty=supplierQtyBase(s)){const tiers=(s?.priceTiers||[]).slice().sort((a,b)=>num(a.minQty)-num(b.minQty));const q=Math.max(1,num(qty,1));const hit=tiers.find(x=>q>=Math.max(1,num(x.minQty,1))&&(!num(x.maxQty)||q<=num(x.maxQty)));return hit&&num(hit.unitPrice)>0?num(hit.unitPrice):supplierUnitPrice(s)}
 function supplierShippingForQty(s,qty=supplierQtyBase(s)){const q=Math.max(1,num(qty,1)),points=s?.shippingPoints||[],hit=points.find(x=>Math.max(1,num(x.qty,1))===q);if(hit){const actual=num(hit.shippingWithCustoms);return actual>0?{shipping:actual,includesCustoms:true}: {shipping:num(hit.shipping),includesCustoms:false}}return{shipping:num(s?.totalShipping),includesCustoms:false}}
 function supplierUnitShipping(s){if(!s)return 0;const q=supplierQtyBase(s),ship=supplierShippingForQty(s,q);return ship.shipping/q}
-function supplierBaseOrderCost(s){if(!s)return 0;const q=supplierQtyBase(s),ship=supplierShippingForQty(s,q);return (s.priceType==='set'?num(s.setPrice):supplierTierUnitPrice(s,q)*q)+ship.shipping}
+function supplierBaseOrderCost(s){if(!s)return 0;const q=supplierQtyBase(s),ship=supplierShippingForQty(s,q);if(s.priceType==='consumable')return num(s.purchasePrice)+ship.shipping;return (s.priceType==='set'?num(s.setPrice):supplierTierUnitPrice(s,q)*q)+ship.shipping}
 function supplierHasCustoms(s){return !!s&&!!s.customs}
 function supplierCustomsCost(s){if(!supplierHasCustoms(s))return 0;const q=supplierQtyBase(s),ship=supplierShippingForQty(s,q);if(ship.includesCustoms)return 0;return supplierBaseOrderCost(s)*0.12}
 function supplierOrderCost(s){return supplierBaseOrderCost(s)+supplierCustomsCost(s)}
