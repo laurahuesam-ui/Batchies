@@ -1,4 +1,4 @@
-function renderAll(){renderOverview();renderProducts();renderPackaging();renderBatches();renderBatchSuggestions();renderSettings();renderInvestments();renderShoppingSimulation();try{if(typeof renderInventorySimulation==='function')renderInventorySimulation()}catch(err){console.error('Lager-Simulation:',err)}}
+function renderAll(){renderOverview();renderProducts();renderPackaging();renderBatches();renderBatchSuggestions();renderSettings();renderInvestments();renderShoppingSimulation();try{if(typeof renderInventorySimulation==='function')renderInventorySimulation()}catch(err){console.error('Lager-Simulation:',err)}try{if(typeof initSalesSimulation==='function')initSalesSimulation()}catch(err){console.error('Verkaufs-Simulation:',err)}}
 function productIsCalculable(p){
   const s=(p?.suppliers||[]).find(x=>x.preferred)||(p?.suppliers||[])[0];
   if(!s)return false;
@@ -76,7 +76,7 @@ function renderOverview(){
     '</tbody></table></div>'
 }
 function renderSettings(){const s=state.settings;['listingFee','transactionPct','paymentPct','paymentFixed','offsitePct','currencyPct','feeVatPct','setupFee','setupSales'].forEach(k=>{const e=$('#'+k);if(e&&document.activeElement!==e)e.value=s[k]});$('#setupPerSale').textContent=euro(s.setupSales>0?s.setupFee/s.setupSales:0)}
-$$('.tab').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab)));$$('[data-go]').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.go)));function switchTab(t){$$('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));$$('.tabpage').forEach(p=>p.classList.add('hidden'));$('#tab-'+t).classList.remove('hidden');if(t==='simulation'&&typeof renderInventorySimulation==='function'){try{renderInventorySimulation()}catch(err){console.error('Lager-Simulation öffnen:',err)}}}
+$$('.tab').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.tab)));$$('[data-go]').forEach(b=>b.addEventListener('click',()=>switchTab(b.dataset.go)));function switchTab(t){$$('.tab').forEach(b=>b.classList.toggle('active',b.dataset.tab===t));$$('.tabpage').forEach(p=>p.classList.add('hidden'));$('#tab-'+t).classList.remove('hidden');if(t==='simulation'){if(typeof renderInventorySimulation==='function'){try{renderInventorySimulation()}catch(err){console.error('Lager-Simulation öffnen:',err)}}if(typeof initSalesSimulation==='function'){try{initSalesSimulation()}catch(err){console.error('Verkaufs-Simulation öffnen:',err)}}}}
 initColorFilter();$('#addProductBtn').onclick=()=>openProduct();
 $('#productsTable').addEventListener('click',e=>{
   const btn=e.target.closest('.product-edit-btn');

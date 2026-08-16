@@ -76,12 +76,24 @@
 .batch-profit-projection-card .profit{font-size:17px;font-weight:850;font-variant-numeric:tabular-nums}
 @media(max-width:900px){.batch-profit-projection-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:520px){.batch-profit-projection-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+.sales-sim-controls{display:grid;grid-template-columns:minmax(220px,1fr) 40px minmax(220px,1fr);gap:12px;align-items:end;margin-bottom:14px}
+.sales-sim-arrow{font-size:22px;font-weight:800;text-align:center;padding-bottom:12px;color:var(--muted)}
+.sales-sim-kpis{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin-bottom:12px}
+.sales-sim-progress{height:12px;background:var(--soft);border:1px solid var(--line);border-radius:999px;overflow:hidden;margin:8px 0}
+.sales-sim-progress>div{height:100%;background:var(--green);width:0}
+.sales-sim-table{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin-top:10px}
+.sales-sim-step{border:1px solid var(--line);border-radius:11px;padding:9px;text-align:center;background:#fff}
+.sales-sim-step .n{font-size:11px;color:var(--muted)}
+.sales-sim-step .v{font-weight:800;margin-top:2px}
+@media(max-width:900px){.sales-sim-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.sales-sim-table{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:650px){.sales-sim-controls{grid-template-columns:1fr}.sales-sim-arrow{display:none}.sales-sim-kpis{grid-template-columns:1fr 1fr}}
 </style>
 </head>
 <body>
 <div class="app">
 <header class="topbar">
-  <div class="brand"><div class="logo">B</div><div><h1>Batchies</h1><div class="subtitle">Produktentwicklung & Stammdaten · v2.9.7</div></div></div>
+  <div class="brand"><div class="logo">B</div><div><h1>Batchies</h1><div class="subtitle">Produktentwicklung & Stammdaten · v3.0.0</div></div></div>
   <div class="actions"><button class="btn" id="exportBackupBtn">Backup</button><button class="btn" id="importBackupBtn">Import</button><button class="btn primary" id="addProductBtn">+ Produkt</button><button class="btn primary" id="addBatchBtn">+ Batch</button><input type="file" id="backupFile" accept="application/json" hidden></div>
 </header>
 <nav class="tabs"><button class="tab active" data-tab="overview">Übersicht</button><button class="tab" data-tab="products">Produkte</button><button class="tab" data-tab="packaging">Verpackung</button><button class="tab" data-tab="batches">Batches</button><button class="tab" data-tab="fees">Gebühren & Kalkulation</button><button class="tab" data-tab="investments">Investitionen</button><button class="tab" data-tab="simulation">Einkaufs-Simulation</button><button class="tab" data-tab="data">Stammdaten & CSV</button></nav>
@@ -135,6 +147,21 @@
     <div class="inventory-tools"><input id="inventorySearch" class="search" placeholder="PID, VID oder Name suchen …"><label class="inventory-toggle"><input id="inventoryOnlyUsed" type="checkbox"> nur Artikel der ausgewählten Batches</label></div>
     <div id="inventoryEditor"></div>
     <div id="inventorySimulationContent" style="margin-top:16px"></div>
+  </div>
+  <div class="card span12">
+    <div class="toolbar">
+      <div>
+        <h2 class="section-title" style="margin-bottom:2px">Verkaufs-Simulation</h2>
+        <div class="muted">Wie viele Verkäufe eines Start-Batches brauchst du, bis dessen kalkulatorischer Gewinn die 1. AK eines weiteren Batches finanzieren kann?</div>
+      </div>
+      <button class="btn secondary" id="salesSimSuggestBtn" type="button">Günstigstes Ziel vorschlagen</button>
+    </div>
+    <div class="sales-sim-controls">
+      <div class="field"><label>Start-Batch</label><select id="salesSimSource"></select></div>
+      <div class="sales-sim-arrow">→</div>
+      <div class="field"><label>Ziel-Batch</label><select id="salesSimTarget"></select></div>
+    </div>
+    <div id="salesSimulationContent"></div>
   </div>
 </div></section>
 <section id="tab-data" class="tabpage hidden"><div class="grid">

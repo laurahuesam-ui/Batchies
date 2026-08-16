@@ -252,3 +252,115 @@ function renderInventorySimulation(){
   if(selectedFirst)selectedFirst.onclick=applyInventoryFromSelectedShoppingSimulation;
   if(zero)zero.onclick=clearInventorySimulationStock;
 }
+
+
+
+function salesSimBatchOptions(){
+  return (state.batches||[])
+    .slice()
+    .sort((a,b)=>String(a.bid).localeCompare(String(b.bid),'de',{numeric:true}))
+}
+function salesSimTargetCost(b){
+  try{return batchProductionPlan(b).firstOrderCost}catch(err){return 0}
+}
+function salesSimProfitPerSale(b){
+  try{return batchCalc(b).profit}catch(err){return 0}
+}
+function salesSimCheapestTarget(sourceKey=null){
+  const candidates=salesSimBatchOptions()
+    .filter(b=>b.key!==sourceKey)
+    .map(b=>({b,cost:salesSimTargetCost(b)}))
+    .filter(x=>x.cost>0)
+    .sort((a,b)=>a.cost-b.cost||String(a.b.bid).localeCompare(String(b.b.bid),'de',{numeric:true}));
+  return candidates[0]?.b||null
+}
+function salesSimPopulateSelects(){
+  const source=$('#salesSimSource'),target=$('#salesSimTarget');
+  if(!source||!target)return;
+  const batches=salesSimBatchOptions(),
+    oldSource=source.value,oldTarget=target.value;
+  source.innerHTML=batches.map(b=>`<option value="${esc(b.key)}">${esc(b.bid)} · ${esc(b.name)}</option>`).join('');
+  target.innerHTML=batches.map(b=>`<option value="${esc(b.key)}">${esc(b.bid)} · ${esc(b.name)}</option>`).join('');
+  if(batches.some(b=>b.key===oldSource))source.value=oldSource;
+  if(batches.some(b=>b.key===oldTarget))target.value=oldTarget;
+  if(!source.value&&batches[0])source.value=batches[0].key;
+  if(!target.value){
+    const cheapest=salesSimCheapestTarget(source.value);
+    if(cheapest)target.value=cheapest.key;
+  }
+}
+function renderSalesSimulation(){
+  const el=$('#salesSimulationContent'),sourceSel=$('#salesSimSource'),targetSel=$('#salesSimTarget');
+  if(!el||!sourceSel||!targetSel)return;
+
+  salesSimPopulateSelects();
+
+  const source=state.batches.find(b=>b.key===sourceSel.value),
+    target=state.batches.find(b=>b.key===targetSel.value);
+
+  if(!source||!target){
+    el.innerHTML='<div class="empty"><strong>Noch nicht genug Batches</strong>Lege mindestens zwei Batches an, um die Verkaufs-Simulation zu nutzen.</div>';
+    return
+  }
+
+  const profit=salesSimProfitPerSale(source),
+    targetCost=salesSimTargetCost(target);
+
+  if(profit<=0){
+    el.innerHTML=`<div class="hint"><strong>${esc(source.bid)} · ${esc(source.name)}</strong> hat aktuell keinen positiven kalkulatorischen Gewinn. Mit diesem Batch kann deshalb kein weiteres Batch nachhaltig finanziert werden.</div>`;
+    return
+  }
+  if(targetCost<=0){
+    el.innerHTML=`<div class="hint">Für <strong>${esc(target.bid)} · ${esc(target.name)}</strong> kann aktuell kein gültiger Kapitalbedarf der 1. AK berechnet werden.</div>`;
+    return
+  }
+
+  const salesNeeded=Math.max(1,Math.ceil(targetCost/profit)),
+    exactSales=targetCost/profit,
+    accumulated=salesNeeded*profit,
+    surplus=accumulated-targetCost,
+    prev=Math.max(0,(salesNeeded-1)*profit),
+    progressBefore=Math.min(100,prev/targetCost*100),
+    cheapest=salesSimCheapestTarget(source.key),
+    isCheapest=cheapest?.key===target.key,
+    steps=[1,5,10,25,50,100];
+
+  el.innerHTML=`<div class="sales-sim-kpis">
+    <div class="production-kpi"><div class="label">Gewinn je Verkauf</div><div class="value">${euro(profit)}</div></div>
+    <div class="production-kpi"><div class="label">1. AK Ziel-Batch</div><div class="value">${euro(targetCost)}</div></div>
+    <div class="production-kpi"><div class="label">Benötigte Verkäufe</div><div class="value">${salesNeeded}</div></div>
+    <div class="production-kpi"><div class="label">Gewinn dann angesammelt</div><div class="value">${euro(accumulated)}</div></div>
+    <div class="production-kpi"><div class="label">Überschuss danach</div><div class="value">${euro(surplus)}</div></div>
+  </div>
+  <div class="info">
+    Mit <strong>${esc(source.bid)} · ${esc(source.name)}</strong> brauchst du bei aktuell <strong>${euro(profit)} kalkulatorischem Gewinn pro Verkauf</strong>
+    <strong>${salesNeeded} Verkäufe</strong>, um die <strong>${euro(targetCost)}</strong> der 1. AK von
+    <strong>${esc(target.bid)} · ${esc(target.name)}</strong> zu finanzieren.
+    ${isCheapest?'<strong>Dieses Ziel ist aktuell das günstigste weitere Batch.</strong>':cheapest?`Das günstigste weitere Ziel wäre aktuell <strong>${esc(cheapest.bid)} · ${esc(cheapest.name)}</strong> mit ${euro(salesSimTargetCost(cheapest))} 1. AK.`:''}
+  </div>
+  <div style="margin-top:12px">
+    <div class="tiny">Nach ${Math.max(0,salesNeeded-1)} Verkäufen: ${euro(prev)} von ${euro(targetCost)} finanziert (${progressBefore.toFixed(1).replace('.',',')} %)</div>
+    <div class="sales-sim-progress"><div style="width:${progressBefore}%"></div></div>
+    <div class="tiny">Der nächste Verkauf überschreitet die benötigte Summe um ${euro(surplus)}.</div>
+  </div>
+  <div class="toolbar compact" style="margin-top:14px;margin-bottom:6px"><strong>Gewinnaufbau</strong><span class="tiny">wenn ausschließlich der kalkulatorische Gewinn reinvestiert wird</span></div>
+  <div class="sales-sim-table">${steps.map(n=>`<div class="sales-sim-step"><div class="n">${n} Verkauf${n===1?'':'e'}</div><div class="v">${euro(n*profit)}</div><div class="tiny">${n*profit>=targetCost?'✓ Ziel finanziert':euro(Math.max(0,targetCost-n*profit))+' fehlen'}</div></div>`).join('')}</div>`;
+}
+function initSalesSimulation(){
+  const source=$('#salesSimSource'),target=$('#salesSimTarget'),suggest=$('#salesSimSuggestBtn');
+  if(!source||!target)return;
+  salesSimPopulateSelects();
+  source.onchange=()=>{
+    if(source.value===target.value){
+      const cheapest=salesSimCheapestTarget(source.value);
+      if(cheapest)target.value=cheapest.key
+    }
+    renderSalesSimulation()
+  };
+  target.onchange=renderSalesSimulation;
+  if(suggest)suggest.onclick=()=>{
+    const cheapest=salesSimCheapestTarget(source.value);
+    if(cheapest){target.value=cheapest.key;renderSalesSimulation()}
+  };
+  renderSalesSimulation()
+}
