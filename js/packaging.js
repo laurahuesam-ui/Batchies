@@ -32,7 +32,19 @@ function packagingSupplierRowHtml(s){
     </div>
     <div class="packaging-tier-panel hidden">
       <div class="packaging-tier-section">
-        <div class="toolbar compact packaging-tier-toolbar"><strong>Preisstaffeln</strong><label class="packaging-tier-type-wrap"><span>Preisart</span><select class="packaging-tier-type"><option value="unit">Stückpreis</option><option value="set">Setpreis</option></select></label><button type="button" class="btn small add-packaging-price-tier">+ Preisstaffel</button></div>
+        <div class="packaging-tier-header">
+  <div class="packaging-tier-header-top">
+    <strong>Preisstaffeln</strong>
+    <button type="button" class="btn small add-packaging-price-tier">+ Preisstaffel</button>
+  </div>
+  <div class="packaging-tier-type-control">
+    <span class="supplier-mini-label">Preisart</span>
+    <select class="packaging-tier-type">
+      <option value="unit">Stückpreis</option>
+      <option value="set">Setpreis</option>
+    </select>
+  </div>
+</div>
         <div class="packaging-price-tiers"></div>
         <div class="tiny">Preisstaffeln dieses Verpackungs-Lieferanten.</div>
       </div>
@@ -74,22 +86,37 @@ function packagingPriceTierRowHtml(t={},forcedType=null){
     unit=type==='set'?(setPrice/setQty):num(t.unitPrice),
     minQty=Math.max(1,num(t.minQty,1)),
     maxQty=num(t.maxQty)||'';
-  return `<div class="packaging-price-tier-row ${type==='set'?'set-tier-row':'unit-tier-row'}" data-price-type="${type}">
-    <div class="pack-tier-field pack-tier-range-field ${type==='set'?'hidden':''}">
+
+  if(type==='set'){
+    return `<div class="packaging-price-tier-row set-tier-row" data-price-type="set">
+      <div class="pack-tier-field">
+        <span class="supplier-mini-label">Setpreis</span>
+        <input class="pack-tier-price" type="number" min="0" step="0.0001" value="${setPrice||''}" placeholder="z. B. 14,99">
+      </div>
+      <div class="pack-tier-field pack-tier-set-field">
+        <span class="supplier-mini-label">Stück im Set</span>
+        <input class="pack-tier-set-qty" type="number" min="1" step="1" value="${setQty}" placeholder="z. B. 25">
+      </div>
+      <div class="pack-tier-field">
+        <span class="supplier-mini-label">Preis/Stück</span>
+        <input class="pack-tier-unit-display" type="text" value="${unit?euro(unit):'–'}" readonly>
+      </div>
+      <div class="pack-tier-remove"><button type="button" class="iconbtn remove-packaging-price-tier">✕</button></div>
+    </div>`
+  }
+
+  return `<div class="packaging-price-tier-row unit-tier-row" data-price-type="unit">
+    <div class="pack-tier-field pack-tier-range-field">
       <span class="supplier-mini-label">Ab Menge</span>
       <input class="pack-tier-min" type="number" min="1" step="1" value="${minQty}" placeholder="z. B. 10">
     </div>
-    <div class="pack-tier-field pack-tier-range-field ${type==='set'?'hidden':''}">
+    <div class="pack-tier-field pack-tier-range-field">
       <span class="supplier-mini-label">Bis Menge</span>
       <input class="pack-tier-max" type="number" min="1" step="1" value="${maxQty}" placeholder="leer = offen">
     </div>
     <div class="pack-tier-field">
-      <span class="supplier-mini-label pack-tier-price-label">${type==='set'?'Setpreis':'Stückpreis'}</span>
-      <input class="pack-tier-price" type="number" min="0" step="0.0001" value="${type==='set'?(setPrice||''):(num(t.unitPrice)||'')}" placeholder="${type==='set'?'z. B. 13,99':'€/Stück'}">
-    </div>
-    <div class="pack-tier-field pack-tier-set-field ${type==='set'?'':'hidden'}">
-      <span class="supplier-mini-label">Stück im Set</span>
-      <input class="pack-tier-set-qty" type="number" min="1" step="1" value="${setQty}" placeholder="z. B. 25">
+      <span class="supplier-mini-label">Stückpreis</span>
+      <input class="pack-tier-price" type="number" min="0" step="0.0001" value="${num(t.unitPrice)||''}" placeholder="€/Stück">
     </div>
     <div class="pack-tier-field">
       <span class="supplier-mini-label">Preis/Stück</span>
@@ -104,16 +131,18 @@ function packagingShippingPointRowHtml(s={}){
 function collectPackagingPriceTiers(r){
   const globalType=r.querySelector('.packaging-tier-type')?.value==='set'?'set':'unit';
   return [...r.querySelectorAll('.packaging-price-tier-row')].map(x=>{
-    const priceType=globalType,
-      rawPrice=num(x.querySelector('.pack-tier-price')?.value),
-      setQty=Math.max(1,num(x.querySelector('.pack-tier-set-qty')?.value,1));
-    if(priceType==='set'){
+    const rawPrice=num(x.querySelector('.pack-tier-price')?.value);
+    if(globalType==='set'){
+      const setQty=Math.max(1,num(x.querySelector('.pack-tier-set-qty')?.value,1));
       return {minQty:setQty,maxQty:setQty,priceType:'set',unitPrice:rawPrice/setQty,setPrice:rawPrice,setQty}
     }
     return {
       minQty:Math.max(1,num(x.querySelector('.pack-tier-min')?.value,1)),
       maxQty:num(x.querySelector('.pack-tier-max')?.value)||null,
-      priceType:'unit',unitPrice:rawPrice,setPrice:0,setQty:1
+      priceType:'unit',
+      unitPrice:rawPrice,
+      setPrice:0,
+      setQty:1
     }
   }).filter(x=>x.unitPrice>0).sort((a,b)=>a.minQty-b.minQty)
 }
@@ -189,24 +218,12 @@ function syncPackagingMainFieldsFromTiers(r){
 function updatePackagingTierUnitDisplays(r){
   if(!r)return;
   const globalTierType=r.querySelector('.packaging-tier-type')?.value==='set'?'set':'unit';
+
   r.querySelectorAll('.packaging-price-tier-row').forEach(row=>{
-    const type=globalTierType,
-      price=num(row.querySelector('.pack-tier-price')?.value),
+    const price=num(row.querySelector('.pack-tier-price')?.value),
       setQty=Math.max(1,num(row.querySelector('.pack-tier-set-qty')?.value,1)),
-      unit=type==='set'?price/setQty:price,
-      qtyInput=row.querySelector('.pack-tier-set-qty'),
-      priceInput=row.querySelector('.pack-tier-price'),
+      unit=globalTierType==='set'?price/setQty:price,
       out=row.querySelector('.pack-tier-unit-display');
-    const setField=row.querySelector('.pack-tier-set-field');
-    const rangeFields=row.querySelectorAll('.pack-tier-range-field');
-    if(setField)setField.classList.toggle('hidden',type!=='set');
-    rangeFields.forEach(f=>f.classList.toggle('hidden',type==='set'));
-    if(qtyInput)qtyInput.disabled=false;
-    row.classList.toggle('set-tier-row',type==='set');
-    row.classList.toggle('unit-tier-row',type!=='set');
-    const label=row.querySelector('.pack-tier-price-label');
-    if(label)label.textContent=type==='set'?'Setpreis':'Stückpreis';
-    if(priceInput)priceInput.placeholder=type==='set'?'z. B. 15,99':'€/Stück';
     if(out)out.value=unit>0?euro(unit):'–'
   });
 
@@ -283,15 +300,37 @@ function bindPackagingSupplierEvents(){
 
     const globalTierType=r.querySelector('.packaging-tier-type');
     if(globalTierType)globalTierType.onchange=()=>{
-      const type=globalTierType.value==='set'?'set':'unit';
-      const existing=collectPackagingPriceTiers(r);
-      r.querySelector('.packaging-price-tiers').innerHTML=existing.map(t=>{
-        const normalized=type==='set'
-          ? {...t,priceType:'set',setQty:Math.max(1,num(t.setQty,t.minQty,1)),setPrice:num(t.setPrice,num(t.unitPrice)*Math.max(1,num(t.setQty,t.minQty,1)))}
-          : {...t,priceType:'unit',unitPrice:num(t.unitPrice)||((num(t.setPrice)/Math.max(1,num(t.setQty,1))))};
-        return packagingPriceTierRowHtml(normalized,type)
-      }).join('');
+      const targetType=globalTierType.value==='set'?'set':'unit',
+        existing=[...r.querySelectorAll('.packaging-price-tier-row')].map(row=>{
+          const price=num(row.querySelector('.pack-tier-price')?.value),
+            oldType=row.dataset.priceType==='set'?'set':'unit',
+            oldSetQty=Math.max(1,num(row.querySelector('.pack-tier-set-qty')?.value,1)),
+            oldMin=Math.max(1,num(row.querySelector('.pack-tier-min')?.value,1)),
+            oldMax=num(row.querySelector('.pack-tier-max')?.value)||null;
+          if(oldType==='set'){
+            return {priceType:'set',setPrice:price,setQty:oldSetQty,unitPrice:price/oldSetQty,minQty:oldSetQty,maxQty:oldSetQty}
+          }
+          return {priceType:'unit',unitPrice:price,minQty:oldMin,maxQty:oldMax,setPrice:0,setQty:1}
+        });
+
+      const normalized=existing.map(t=>{
+        if(targetType==='set'){
+          const qty=Math.max(1,num(t.setQty,t.minQty,1)),
+            setPrice=t.priceType==='set'?num(t.setPrice):num(t.unitPrice)*qty;
+          return {priceType:'set',setPrice,setQty:qty,unitPrice:setPrice/qty,minQty:qty,maxQty:qty}
+        }
+        return {
+          priceType:'unit',
+          unitPrice:t.priceType==='set'?num(t.setPrice)/Math.max(1,num(t.setQty,1)):num(t.unitPrice),
+          minQty:Math.max(1,num(t.minQty,t.setQty,1)),
+          maxQty:t.priceType==='set'?null:t.maxQty,
+          setPrice:0,setQty:1
+        }
+      });
+
+      r.querySelector('.packaging-price-tiers').innerHTML=normalized.map(t=>packagingPriceTierRowHtml(t,targetType)).join('');
       bindPackagingSupplierEvents();
+      updatePackagingTierSummary(r);
       updatePackagingTierUnitDisplays(r);
       syncPackagingMainFieldsFromTiers(r)
     };
