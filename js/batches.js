@@ -90,6 +90,10 @@ function renderBatchProductionPlan(b){
   ${productionLinesHtml(p.productLines,'Produkte (PID)')}${productionLinesHtml(p.packagingLines,'Verpackung (VID)')}`;
   const h=$('#batchPlanHorizon');if(h)h.oninput=()=>renderBatchProductionPlan(b)
 }
+function batchVariantDots(b,compact=true){
+  const colors=[...new Set((b?.saleVariants||[]).map(v=>v?.name).filter(Boolean))];
+  return colors.length?productColorDots(colors,compact):'<span class="tiny">keine Verkaufsvariante</span>'
+}
 function renderBatches(){
   state.batches.forEach(b=>{
     b.items=sortBatchItemsByPid(b.items);
@@ -119,7 +123,7 @@ function renderBatches(){
       const c=batchCalc(b),prod=batchProductionPlan(b);
       return `<tr>
         <td class="batch-id-col"><span class="idchip">${esc(b.bid)}</span></td>
-        <td class="batch-name-col"><div class="name">${esc(b.name)}</div></td>
+        <td class="batch-name-col"><div class="name">${esc(b.name)}</div>${batchVariantDots(b,true)}</td>
         <td class="batch-status-col"><span class="badge ${b.status}">${statusLabel(b.status)}</span></td>
         <td class="batch-products-col"><div class="batch-products-list">${(b.items||[]).map(i=>esc(i.pid)+' × '+num(i.qty,1)).join(', ')||'–'}</div></td>
         <td class="batch-vid-col"><div class="batch-vid-list">${(b.packagingItems||[]).map(i=>esc(i.vid)+' × '+num(i.qty,1)).join(', ')||'–'}</div></td>
@@ -186,12 +190,19 @@ function batchVariantProductOptions(pid,selected=''){
   const p=state.products.find(x=>x.pid===pid),colors=normalizeProductColors(p?.colors);
   return `<option value="">Ohne Farbe / neutral</option>`+colors.map(c=>`<option value="${esc(c)}" ${c===selected?'selected':''}>${esc(c)}</option>`).join('')
 }
+function batchVariantNameOptions(pids,selected=''){
+  const colors=[...new Set((pids||[]).flatMap(pid=>normalizeProductColors(state.products.find(x=>x.pid===pid)?.colors)))];
+  if(selected&&!colors.includes(selected))colors.push(selected);
+  return `<option value="">Farbe auswählen …</option>`+colors.map(c=>`<option value="${esc(c)}" ${c===selected?'selected':''}>${esc(c)}</option>`).join('')
+}
 function addBatchVariantRow(v=null){
   const host=$('#batchVariantRows');if(!host)return;
   const key=v?.key||crypto.randomUUID(),name=v?.name||'',pc=v?.productColors||{};
   const products=$$('#batchItemRows .batch-product-row').map(r=>r.querySelector('.batch-product')?.value).filter(Boolean);
+  const variantDefault=name;
+  products.forEach(pid=>{if(!pc[pid]&&variantDefault&&normalizeProductColors(state.products.find(x=>x.pid===pid)?.colors).includes(variantDefault))pc[pid]=variantDefault});
   host.insertAdjacentHTML('beforeend',`<div class="batch-variant-card" data-key="${esc(key)}">
-    <div class="batch-variant-head"><div class="field"><label>Variantenname / Verkaufsfarbe</label><input class="batch-variant-name" value="${esc(name)}" placeholder="z. B. Gelb, Rosa, Blau"></div><button type="button" class="iconbtn remove-batch-variant">✕</button></div>
+    <div class="batch-variant-head"><div class="field"><label>Verkaufsfarbe</label><select class="batch-variant-name">${batchVariantNameOptions(products,name)}</select></div><button type="button" class="iconbtn remove-batch-variant">✕</button></div>
     <div class="batch-variant-products">${products.map(pid=>{const p=state.products.find(x=>x.pid===pid);return `<div class="batch-variant-product" data-pid="${esc(pid)}"><div class="tiny"><strong>${esc(pid)}</strong> · ${esc(p?.name||pid)}</div><label>Farbe in dieser Variante</label><select class="batch-variant-product-color">${batchVariantProductOptions(pid,pc[pid]||'')}</select></div>`}).join('')}</div>
   </div>`);
   host.lastElementChild.querySelector('.remove-batch-variant').onclick=()=>host.lastElementChild?.remove()
@@ -204,7 +215,7 @@ function collectBatchVariants(){
   return $$('#batchVariantRows .batch-variant-card').map(card=>{
     const productColors={};
     card.querySelectorAll('.batch-variant-product').forEach(row=>{productColors[row.dataset.pid]=row.querySelector('.batch-variant-product-color')?.value||''});
-    return{key:card.dataset.key||crypto.randomUUID(),name:card.querySelector('.batch-variant-name')?.value.trim()||'Variante',productColors}
+    return{key:card.dataset.key||crypto.randomUUID(),name:card.querySelector('.batch-variant-name')?.value||'',productColors}
   })
 }
 function refreshBatchVariantProducts(){

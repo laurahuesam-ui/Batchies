@@ -64,7 +64,7 @@ function renderOverview(){
       const c=batchCalc(b),plan=batchProductionPlan(b);
       return `<tr>
         <td class="ob-id"><span class="idchip">${esc(b.bid)}</span></td>
-        <td class="ob-name"><div class="name">${esc(b.name)}</div></td>
+        <td class="ob-name"><div class="name">${esc(b.name)}</div>${typeof batchVariantDots==='function'?batchVariantDots(b,true):''}</td>
         <td class="ob-status"><span class="badge ${b.status}">${statusLabel(b.status)}</span></td>
         <td class="ob-products"><div class="batch-products-list">${(b.items||[]).map(i=>esc(i.pid)+' × '+num(i.qty,1)).join(', ')||'–'}</div></td>
         <td class="ob-vid"><div class="batch-vid-list">${(b.packagingItems||[]).map(i=>esc(i.vid)+' × '+num(i.qty,1)).join(', ')||'–'}</div></td>
