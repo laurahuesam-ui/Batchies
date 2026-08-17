@@ -91,8 +91,13 @@ function renderBatchProductionPlan(b){
   const h=$('#batchPlanHorizon');if(h)h.oninput=()=>renderBatchProductionPlan(b)
 }
 function batchVariantDots(b,compact=true){
-  const colors=[...new Set((b?.saleVariants||[]).map(v=>v?.name).filter(Boolean))];
-  return colors.length?productColorDots(colors,compact):'<span class="tiny">keine Verkaufsvariante</span>'
+  const names=[...new Set((b?.saleVariants||[]).map(v=>String(v?.name||'').trim()).filter(Boolean))];
+  if(!names.length)return '<span class="tiny">keine Verkaufsvariante</span>';
+  return `<div class="product-color-dots${compact?' compact':''}" aria-label="Verkaufsfarben">${names.map(name=>{
+    const c=PRODUCT_COLOR_MAP[name];
+    const dot=c?.hex||'#b8b8b8';
+    return `<span class="product-color-dot batch-variant-dot" style="--dot:${dot}" title="${esc(name)}" aria-label="${esc(name)}"></span>`
+  }).join('')}</div>`
 }
 function renderBatches(){
   state.batches.forEach(b=>{
@@ -205,11 +210,39 @@ function addBatchVariantRow(v=null){
     <div class="batch-variant-head"><div class="field"><label>Verkaufsfarbe</label><select class="batch-variant-name">${batchVariantNameOptions(products,name)}</select></div><button type="button" class="iconbtn remove-batch-variant">✕</button></div>
     <div class="batch-variant-products">${products.map(pid=>{const p=state.products.find(x=>x.pid===pid);return `<div class="batch-variant-product" data-pid="${esc(pid)}"><div class="tiny"><strong>${esc(pid)}</strong> · ${esc(p?.name||pid)}</div><label>Farbe in dieser Variante</label><select class="batch-variant-product-color">${batchVariantProductOptions(pid,pc[pid]||'')}</select></div>`}).join('')}</div>
   </div>`);
-  host.lastElementChild.querySelector('.remove-batch-variant').onclick=()=>host.lastElementChild?.remove()
+  const card=host.lastElementChild;
+  bindBatchVariantEvents();
+  if(card&&name)applyBatchVariantMainColor(card)
+}
+function applyBatchVariantMainColor(card){
+  if(!card)return;
+  const main=card.querySelector('.batch-variant-name')?.value||'';
+  if(!main)return;
+  card.querySelectorAll('.batch-variant-product').forEach(row=>{
+    const pid=row.dataset.pid,
+      sel=row.querySelector('.batch-variant-product-color'),
+      available=normalizeProductColors(state.products.find(x=>x.pid===pid)?.colors);
+    if(sel&&available.includes(main)){
+      sel.value=main;
+      sel.dataset.autoColor=main
+    }
+  })
+}
+function bindBatchVariantEvents(){
+  $$('#batchVariantRows .batch-variant-card').forEach(card=>{
+    const main=card.querySelector('.batch-variant-name');
+    if(main)main.onchange=()=>applyBatchVariantMainColor(card);
+    card.querySelectorAll('.batch-variant-product-color').forEach(sel=>{
+      sel.onchange=()=>{sel.dataset.autoColor=''}
+    });
+    const remove=card.querySelector('.remove-batch-variant');
+    if(remove)remove.onclick=()=>card.remove()
+  })
 }
 function renderBatchVariants(variants=[]){
   const host=$('#batchVariantRows');if(!host)return;host.innerHTML='';
-  (variants||[]).forEach(v=>addBatchVariantRow(v))
+  (variants||[]).forEach(v=>addBatchVariantRow(v));
+  bindBatchVariantEvents()
 }
 function collectBatchVariants(){
   return $$('#batchVariantRows .batch-variant-card').map(card=>{
@@ -219,7 +252,9 @@ function collectBatchVariants(){
   })
 }
 function refreshBatchVariantProducts(){
-  const current=collectBatchVariants();renderBatchVariants(current)
+  const current=collectBatchVariants();
+  renderBatchVariants(current);
+  $$('#batchVariantRows .batch-variant-card').forEach(card=>applyBatchVariantMainColor(card))
 }
 function collectBatchDraft(){
   const items=$$('#batchItemRows .batch-product-row').map(r=>{
