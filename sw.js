@@ -1,10 +1,10 @@
-const CACHE='batchies-v3.2.1';
+const CACHE='batchies-v3.3.0';
 const ASSETS=[
   './','./index.html','./manifest.webmanifest','./icon-192.png','./icon-512.png',
   './data/categories.json','./js/category-data.js','./js/recovery-data.js',
   './js/config.js','./js/core.js','./js/categories.js','./js/pricing.js',
   './js/colors.js','./js/products.js','./js/batches.js','./js/batch-suggestions.js',
-  './js/exports.js','./js/simulation.js','./js/packaging.js','./js/app.js'
+  './js/exports.js','./js/simulation.js','./js/packaging.js','./js/warehouse.js','./js/sales.js','./js/app.js'
 ];
 
 self.addEventListener('install',e=>{
