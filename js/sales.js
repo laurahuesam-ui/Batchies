@@ -1,38 +1,24 @@
 
 function ensureSalesData(){ensureRealWarehouse();if(!Array.isArray(state.salesHistory))state.salesHistory=[]}
-function batchColorCandidates(b){
-  const colorSets=(b.items||[]).map(i=>{
-    const p=state.products.find(x=>x.pid===i.pid),colors=normalizeProductColors(p?.colors);
-    return colors
-  }).filter(x=>x.length);
-  if(!colorSets.length)return [''];
-  let intersection=[...colorSets[0]];
-  colorSets.slice(1).forEach(set=>intersection=intersection.filter(c=>set.includes(c)));
-  if(intersection.length)return intersection;
-  // If no strict common color exists, retain all stock-supported colors, validation decides feasibility.
-  return [...new Set(colorSets.flat())]
+function batchSaleVariants(b){
+  return Array.isArray(b?.saleVariants)?b.saleVariants.filter(v=>v&&v.name):[]
 }
+function batchColorCandidates(b){return batchSaleVariants(b).map(v=>v.name)}
+function selectedBatchSaleVariant(b,name){return batchSaleVariants(b).find(v=>v.name===name)||null}
+
 function inventoryLotsForRequirement(kind,id,color){
   const lots=(state.realWarehouse||[]).filter(x=>x.kind===kind&&x.itemId===id&&num(x.qty)>0);
   if(!color)return lots;
   const exact=lots.filter(x=>x.color===color),neutral=lots.filter(x=>!x.color);
   return [...exact,...neutral]
 }
-function itemRequiresColor(kind,id,batchColor){
-  if(!batchColor)return false;
-  if(kind==='PID'){
-    const colors=normalizeProductColors(state.products.find(x=>x.pid===id)?.colors);
-    return colors.includes(batchColor)
-  }
-  // VID becomes color-sensitive only if actual stock has colored variants for that VID.
-  return (state.realWarehouse||[]).some(x=>x.kind==='VID'&&x.itemId===id&&x.color===batchColor)
+function saleRequirements(b,variantName,qty){
+  const variant=selectedBatchSaleVariant(b,variantName),pc=variant?.productColors||{},req=[];
+  (b.items||[]).forEach(i=>req.push({kind:'PID',id:i.pid,need:Math.max(1,num(i.qty,1))*qty,color:pc[i.pid]||''}));
+  (b.packagingItems||[]).forEach(i=>req.push({kind:'VID',id:i.vid,need:Math.max(.001,num(i.qty,1))*qty,color:''}));
+  return req
 }
-function saleRequirements(b,color,qty){
-  const req=[];
-  (b.items||[]).forEach(i=>req.push({kind:'PID',id:i.pid,need:Math.max(1,num(i.qty,1))*qty}));
-  (b.packagingItems||[]).forEach(i=>req.push({kind:'VID',id:i.vid,need:Math.max(.001,num(i.qty,1))*qty}));
-  return req.map(r=>({...r,color:itemRequiresColor(r.kind,r.id,color)?color:''}))
-}
+
 function availableForSaleRequirement(r){
   return inventoryLotsForRequirement(r.kind,r.id,r.color).reduce((a,x)=>a+num(x.qty),0)
 }
@@ -55,11 +41,10 @@ function consumeWarehouseRequirement(r){
 }
 function saleColorOptions(){
   const sel=$('#saleBatchSelect'),el=$('#saleColorSelect');if(!sel||!el)return;
-  const b=state.batches.find(x=>x.key===sel.value);
-  if(!b){el.innerHTML='<option value="">Ohne Farbe</option>';return}
-  const colors=batchColorCandidates(b);
-  el.innerHTML=(colors.includes('')?colors:['',...colors]).map(c=>`<option value="${esc(c)}">${esc(c||'Ohne Farbe / gemischt')}</option>`).join('')
+  const b=state.batches.find(x=>x.key===sel.value),variants=batchSaleVariants(b);
+  el.innerHTML=variants.length?variants.map(v=>`<option value="${esc(v.name)}">${esc(v.name)}</option>`).join(''):'<option value="">Keine Verkaufsvariante angelegt</option>'
 }
+
 function renderSaleBatchOptions(){
   const el=$('#saleBatchSelect');if(!el)return;
   const old=el.value;
@@ -81,6 +66,7 @@ function bookRealSale(){
   ensureSalesData();
   const b=state.batches.find(x=>x.key===$('#saleBatchSelect')?.value),qty=Math.max(1,Math.floor(num($('#saleQty')?.value,1))),color=$('#saleColorSelect')?.value||'',price=Math.max(0,num($('#saleActualPrice')?.value));
   const status=$('#saleActionStatus');if(!b)return;
+  if(!selectedBatchSaleVariant(b,color)){if(status)status.textContent='⚠ Für dieses Batch ist keine gültige Verkaufsvariante ausgewählt.';return}
   const v=saleValidation(b,color,qty);
   if(!v.ok){if(status)status.textContent='⚠ Nicht gebucht: mindestens eine Lagerposition reicht nicht.';renderSaleAvailability();return}
   let cogs=0;
@@ -99,11 +85,9 @@ function stockCapacityForVariant(b,color){
   return Math.max(0,Math.min(...one.map(r=>Math.floor(availableForSaleRequirement(r)/r.need))))
 }
 function realSaleVariantsForBatch(b){
-  const colors=batchColorCandidates(b),variants=[];
-  if(!colors.length||colors.every(c=>!c))return[{color:'',capacity:stockCapacityForVariant(b,'')}];
-  colors.forEach(color=>variants.push({color,capacity:stockCapacityForVariant(b,color)}));
-  return variants
+  return batchSaleVariants(b).map(v=>({color:v.name,capacity:stockCapacityForVariant(b,v.name)}))
 }
+
 function renderRealStockSalesSimulation(){
   const el=$('#realStockSalesSimulation');if(!el)return;
   ensureSalesData();

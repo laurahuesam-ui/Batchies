@@ -181,6 +181,35 @@ function bindBatchPackagingEvents(){
     liveBatchCalc()
   }))
 }
+
+function batchVariantProductOptions(pid,selected=''){
+  const p=state.products.find(x=>x.pid===pid),colors=normalizeProductColors(p?.colors);
+  return `<option value="">Ohne Farbe / neutral</option>`+colors.map(c=>`<option value="${esc(c)}" ${c===selected?'selected':''}>${esc(c)}</option>`).join('')
+}
+function addBatchVariantRow(v=null){
+  const host=$('#batchVariantRows');if(!host)return;
+  const key=v?.key||crypto.randomUUID(),name=v?.name||'',pc=v?.productColors||{};
+  const products=$$('#batchItemRows .batch-product-row').map(r=>r.querySelector('.batch-product')?.value).filter(Boolean);
+  host.insertAdjacentHTML('beforeend',`<div class="batch-variant-card" data-key="${esc(key)}">
+    <div class="batch-variant-head"><div class="field"><label>Variantenname / Verkaufsfarbe</label><input class="batch-variant-name" value="${esc(name)}" placeholder="z. B. Gelb, Rosa, Blau"></div><button type="button" class="iconbtn remove-batch-variant">✕</button></div>
+    <div class="batch-variant-products">${products.map(pid=>{const p=state.products.find(x=>x.pid===pid);return `<div class="batch-variant-product" data-pid="${esc(pid)}"><div class="tiny"><strong>${esc(pid)}</strong> · ${esc(p?.name||pid)}</div><label>Farbe in dieser Variante</label><select class="batch-variant-product-color">${batchVariantProductOptions(pid,pc[pid]||'')}</select></div>`}).join('')}</div>
+  </div>`);
+  host.lastElementChild.querySelector('.remove-batch-variant').onclick=()=>host.lastElementChild?.remove()
+}
+function renderBatchVariants(variants=[]){
+  const host=$('#batchVariantRows');if(!host)return;host.innerHTML='';
+  (variants||[]).forEach(v=>addBatchVariantRow(v))
+}
+function collectBatchVariants(){
+  return $$('#batchVariantRows .batch-variant-card').map(card=>{
+    const productColors={};
+    card.querySelectorAll('.batch-variant-product').forEach(row=>{productColors[row.dataset.pid]=row.querySelector('.batch-variant-product-color')?.value||''});
+    return{key:card.dataset.key||crypto.randomUUID(),name:card.querySelector('.batch-variant-name')?.value.trim()||'Variante',productColors}
+  })
+}
+function refreshBatchVariantProducts(){
+  const current=collectBatchVariants();renderBatchVariants(current)
+}
 function collectBatchDraft(){
   const items=$$('#batchItemRows .batch-product-row').map(r=>{
     const product=r.querySelector('.batch-product'),qty=r.querySelector('.batch-qty');
@@ -197,6 +226,7 @@ function collectBatchDraft(){
     status:$('#batchStatus').value,
     items,
     packagingItems,
+    saleVariants:collectBatchVariants(),
     targetMargin:30,
     targetProfit:num($('#batchTargetProfit').value,5),
     autoTargetProfit:$('#batchAutoTargetProfit').checked,
@@ -278,7 +308,7 @@ function openBatch(key=null){
   if(dlg.open)dlg.close();
   $('#batchItemRows').innerHTML='';
   $('#batchPackagingRows').innerHTML='';
-  $('#batchKey').value=b?.key||'';$('#batchBid').value=b?.bid||'';$('#batchBidLabel').textContent=b?.bid||'BID wird beim Speichern vergeben';$('#batchModalTitle').textContent=b?'Batch bearbeiten':'Neuer Batch';$('#batchName').value=b?.name||'';$('#batchStatus').value=b?.status||'idea';renderBatchItemRows(b?.items||[]);renderBatchPackagingRows(b?.packagingItems||[]);$('#batchTargetProfit').value=b?.targetProfit??5;$('#batchAutoTargetProfit').checked=b?.autoTargetProfit!==false;$('#batchTargetProfit').disabled=$('#batchAutoTargetProfit').checked;$('#batchSalePrice').value=b?.salePrice??0;$('#batchUseOffsite').checked=!!b?.useOffsite;$('#batchUseCurrency').checked=!!b?.useCurrency;$('#batchUseSetup').checked=!!b?.useSetup;$('#batchLaborMinutes').value=b?.laborMinutes??0;$('#batchHourlyRate').value=b?.hourlyRate??0;$('#batchOutboundShipping').value=b?.outboundShipping??0;$('#batchAdCost').value=b?.adCost??0;$('#batchRiskPct').value=b?.riskPct??0;$('#batchFixedAllocation').value=b?.fixedAllocation??0;$('#batchNotes').value=b?.notes||'';$('#deleteBatchBtn').classList.toggle('hidden',!b);
+  $('#batchKey').value=b?.key||'';$('#batchBid').value=b?.bid||'';$('#batchBidLabel').textContent=b?.bid||'BID wird beim Speichern vergeben';$('#batchModalTitle').textContent=b?'Batch bearbeiten':'Neuer Batch';$('#batchName').value=b?.name||'';$('#batchStatus').value=b?.status||'idea';renderBatchItemRows(b?.items||[]);renderBatchPackagingRows(b?.packagingItems||[]);renderBatchVariants(b?.saleVariants||[]);$('#batchTargetProfit').value=b?.targetProfit??5;$('#batchAutoTargetProfit').checked=b?.autoTargetProfit!==false;$('#batchTargetProfit').disabled=$('#batchAutoTargetProfit').checked;$('#batchSalePrice').value=b?.salePrice??0;$('#batchUseOffsite').checked=!!b?.useOffsite;$('#batchUseCurrency').checked=!!b?.useCurrency;$('#batchUseSetup').checked=!!b?.useSetup;$('#batchLaborMinutes').value=b?.laborMinutes??0;$('#batchHourlyRate').value=b?.hourlyRate??0;$('#batchOutboundShipping').value=b?.outboundShipping??0;$('#batchAdCost').value=b?.adCost??0;$('#batchRiskPct').value=b?.riskPct??0;$('#batchFixedAllocation').value=b?.fixedAllocation??0;$('#batchNotes').value=b?.notes||'';$('#deleteBatchBtn').classList.toggle('hidden',!b);
   liveBatchCalc();
   dlg.showModal();
   if(b&&typeof renderBatchAssistant==='function'){try{renderBatchAssistant(b)}catch(err){console.error('Batch-Assistent:',err)}}
