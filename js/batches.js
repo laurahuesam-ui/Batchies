@@ -93,7 +93,11 @@ function renderBatchProductionPlan(b){
 function batchVariantDots(b,compact=true){
   const names=[...new Set((b?.saleVariants||[]).map(v=>String(v?.name||'').trim()).filter(Boolean))];
   if(!names.length)return '<span class="tiny">keine Verkaufsvariante</span>';
-  return productColorDots(names,compact)
+  return `<div class="product-color-dots${compact?' compact':''}" aria-label="Verkaufsfarben">${names.map(name=>{
+    const c=PRODUCT_COLOR_MAP[name];
+    const hex=(c&&typeof c.hex==='string'&&c.hex.trim())?c.hex:'#b8b8b8';
+    return `<span class="product-color-dot batch-sale-color-dot" style="background:${esc(hex)}!important;--dot:${esc(hex)}" title="${esc(name)}" aria-label="${esc(name)}"></span>`
+  }).join('')}</div>`
 }
 function renderBatches(){
   state.batches.forEach(b=>{
