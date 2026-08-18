@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#24513b">
 <meta name="description" content="Batchies – Produkt- und Batchentwicklung, Lieferantenvergleich und Etsy-Preiskalkulation.">
-<link rel="manifest" href="manifest.webmanifest?v=3.4.1">
+<link rel="manifest" href="manifest.webmanifest?v=3.4.2">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <title>Batchies – Produktentwicklung</title>
@@ -160,12 +160,20 @@
 
 .forecast-ok-details{margin-top:10px}.forecast-ok-details summary{cursor:pointer;font-weight:700}.forecast-status-group{margin-top:8px}.forecast-table-title{font-weight:800;margin:4px 0 6px}
 .hidden{display:none!important}
+
+.purchase-group-list{display:grid;gap:8px}
+.purchase-item-group{border:1px solid var(--line);border-radius:11px;padding:9px;background:#fff}
+.purchase-item-group-head{display:grid;grid-template-columns:minmax(210px,1.4fr) 1fr 2fr 100px;gap:8px;align-items:center}
+.purchase-color-lines{margin-top:6px;border-top:1px solid var(--line)}
+.purchase-color-line{display:grid;grid-template-columns:minmax(120px,1fr) 110px 140px 110px;gap:7px;padding:5px 2px;font-size:12px;border-bottom:1px solid var(--line)}
+.purchase-color-line:last-child{border-bottom:0}
+@media(max-width:850px){.purchase-item-group-head{grid-template-columns:1fr 1fr}.purchase-color-line{grid-template-columns:1fr 1fr}}
 </style>
 </head>
 <body>
 <div class="app">
 <header class="topbar">
-  <div class="brand"><div class="logo">B</div><div><h1>Batchies</h1><div class="subtitle">Produktentwicklung & Stammdaten · v3.4.1</div></div></div>
+  <div class="brand"><div class="logo">B</div><div><h1>Batchies</h1><div class="subtitle">Produktentwicklung & Stammdaten · v3.4.2</div></div></div>
   <div class="actions"><button class="btn" id="exportBackupBtn">Backup</button><button class="btn" id="importBackupBtn">Import</button><button class="btn primary" id="addProductBtn">+ Produkt</button><button class="btn primary" id="addBatchBtn">+ Batch</button><input type="file" id="backupFile" accept="application/json" hidden></div>
 </header>
 <nav class="tabs"><button class="tab active" data-tab="overview">Übersicht</button><button class="tab" data-tab="products">Produkte</button><button class="tab" data-tab="packaging">Verpackung</button><button class="tab" data-tab="batches">Batches</button><button class="tab" data-tab="warehouse">Lager</button><button class="tab" data-tab="sales">Verkäufe</button><button class="tab" data-tab="fees">Gebühren & Kalkulation</button><button class="tab" data-tab="investments">Investitionen</button><button class="tab" data-tab="simulation">Einkaufs-Simulation</button><button class="tab" data-tab="data">Stammdaten & CSV</button></nav>
@@ -408,20 +416,20 @@
   <div class="modal-foot"><button type="button" class="btn danger hidden" id="deletePackagingBtn">Verpackungsmaterial löschen</button><span style="flex:1"></span><button type="button" class="btn cancel-packaging-dialog">Abbrechen</button><button type="submit" class="btn primary" value="save" id="savePackagingBtn">Speichern</button></div>
 </form></dialog>
 
-<script src="js/category-data.js?v=3.4.1"></script>
-<script src="js/recovery-data.js?v=3.4.1"></script>
-<script src="js/config.js?v=3.4.1"></script>
-<script src="js/colors.js?v=3.4.1"></script>
-<script src="js/core.js?v=3.4.1"></script>
-<script src="js/categories.js?v=3.4.1"></script>
-<script src="js/pricing.js?v=3.4.1"></script>
-<script src="js/products.js?v=3.4.1"></script>
-<script src="js/batches.js?v=3.4.1"></script>
-<script src="js/batch-suggestions.js?v=3.4.1"></script>
-<script src="js/exports.js?v=3.4.1"></script>
-<script src="js/simulation.js?v=3.4.1"></script>
-<script src="js/packaging.js?v=3.4.1"></script>
-<script src="js/warehouse.js?v=3.4.1"></script>
-<script src="js/sales.js?v=3.4.1"></script>
-<script src="js/app.js?v=3.4.1"></script>
+<script src="js/category-data.js?v=3.4.2"></script>
+<script src="js/recovery-data.js?v=3.4.2"></script>
+<script src="js/config.js?v=3.4.2"></script>
+<script src="js/colors.js?v=3.4.2"></script>
+<script src="js/core.js?v=3.4.2"></script>
+<script src="js/categories.js?v=3.4.2"></script>
+<script src="js/pricing.js?v=3.4.2"></script>
+<script src="js/products.js?v=3.4.2"></script>
+<script src="js/batches.js?v=3.4.2"></script>
+<script src="js/batch-suggestions.js?v=3.4.2"></script>
+<script src="js/exports.js?v=3.4.2"></script>
+<script src="js/simulation.js?v=3.4.2"></script>
+<script src="js/packaging.js?v=3.4.2"></script>
+<script src="js/warehouse.js?v=3.4.2"></script>
+<script src="js/sales.js?v=3.4.2"></script>
+<script src="js/app.js?v=3.4.2"></script>
 </body></html>
