@@ -141,6 +141,32 @@ function planningBaseOrder(kind,id){
   if(!s)return{qty:0,cost:0};
   return{qty:Math.max(.001,supplierQtyBase(s)),cost:Math.max(0,supplierOrderCost(s))}
 }
+function planningOrderQuote(kind,id,requiredQty){
+  const s=planningPreferredSupplier(kind,id);
+  if(!s)return{minQty:0,orderedQty:0,cost:0,orderUnits:0,isDiscretePack:false,missing:true};
+
+  const required=Math.max(0,num(requiredQty));
+  const minQty=Math.max(.001,supplierQtyBase(s));
+
+  // Stückpreis + MOQ: MOQ is only the minimum. Above it, quantity can increase by 1.
+  if(s.priceType!=='set'&&s.priceType!=='consumable'){
+    const orderedQty=required<=1e-9?0:Math.max(minQty,Math.ceil(required));
+    if(orderedQty<=0)return{minQty,orderedQty:0,cost:0,orderUnits:0,isDiscretePack:false,missing:false};
+    const ship=supplierShippingForQty(s,orderedQty),
+      goods=supplierTierUnitPrice(s,orderedQty)*orderedQty,
+      baseCost=goods+ship.shipping,
+      customs=(supplierHasCustoms(s)&&!ship.includesCustoms)?baseCost*.12:0;
+    return{minQty,orderedQty,cost:baseCost+customs,orderUnits:orderedQty,isDiscretePack:false,missing:false}
+  }
+
+  // Sets / consumables remain physically indivisible packages.
+  const packQty=minQty,
+    packs=required<=1e-9?0:Math.max(1,Math.ceil(required/packQty)),
+    orderedQty=packs*packQty,
+    cost=packs*supplierOrderCost(s);
+  return{minQty,orderedQty,cost,orderUnits:packs,isDiscretePack:true,missing:false}
+}
+
 function actualWeeklyRate(batchKey,variant){
   const cutoff=Date.now()-8*7*24*3600*1000;
   const sales=(state.salesHistory||[]).filter(x=>x.batchKey===batchKey&&x.color===variant&&new Date(x.soldAt).getTime()>=cutoff);
@@ -176,6 +202,20 @@ function purchaseCalcAddRow(row=null){
   state.salesPlanning.purchaseRows.push({key:row?.key||crypto.randomUUID(),batchKey:row?.batchKey||first.key,variant,qty:Math.max(1,num(row?.qty,1))});
   persistSalesPlanning();renderPurchaseCalcRows();renderPurchaseCalc()
 }
+function purchaseCalcAddAllVariants(){
+  ensureSalesPlanning();
+  const existing=new Set(state.salesPlanning.purchaseRows.map(r=>planningVariantKey(r.batchKey,r.variant)));
+  let added=0;
+  allConfiguredVariants().forEach(x=>{
+    const k=planningVariantKey(x.b.key,x.variant);
+    if(existing.has(k))return;
+    state.salesPlanning.purchaseRows.push({key:crypto.randomUUID(),batchKey:x.b.key,variant:x.variant,qty:1});
+    existing.add(k);added++
+  });
+  persistSalesPlanning();renderPurchaseCalcRows();renderPurchaseCalc();
+  const status=$('#purchaseCalcBulkStatus');if(status)status.textContent=added?`✓ ${added} Farbvarianten hinzugefügt`:'✓ Alle Farbvarianten sind bereits ausgewählt'
+}
+
 function purchaseCalcBatchOptions(selected){return state.batches.filter(b=>batchSaleVariants(b).length).map(b=>`<option value="${esc(b.key)}" ${b.key===selected?'selected':''}>${esc(b.bid)} · ${esc(b.name)}</option>`).join('')}
 function purchaseCalcVariantOptions(batchKey,selected){const b=state.batches.find(x=>x.key===batchKey);return batchSaleVariants(b).map(v=>`<option value="${esc(v.name)}" ${v.name===selected?'selected':''}>${esc(v.name)}</option>`).join('')}
 function renderPurchaseCalcRows(){
@@ -225,8 +265,6 @@ function calcPurchasePlan(useStock=true){
   const lines=[],groupPlans=[];
 
   groups.forEach(g=>{
-    const base=planningBaseOrder(g.kind,g.id),
-      moq=base.qty;
 
     // Real stock must be allocated only once. Exact-color inventory is consumed
     // first; neutral inventory is a shared pool and cannot be counted twice.
@@ -282,20 +320,23 @@ function calcPurchasePlan(useStock=true){
       })
     });
 
-    // MOQ / supplier base order is applied ONCE to the combined shortage.
-    const packs=totalShort>1e-9&&moq>0?Math.ceil(totalShort/moq):0,
-      ordered=packs*moq,
-      cost=packs*base.cost,
+    // Apply MOQ exactly once per PID/VID. For ordinary piece-priced products
+    // MOQ is a MINIMUM, not a pack size: need 6 with MOQ 5 => order 6.
+    const quote=planningOrderQuote(g.kind,g.id,totalShort),
+      ordered=quote.orderedQty,
+      cost=quote.cost,
+      packs=quote.orderUnits,
       excess=Math.max(0,ordered-totalShort),
-      belowMoq=totalShort>1e-9&&moq>0&&totalShort<moq,
-      missingSupplier=totalShort>1e-9&&moq<=0;
+      belowMoq=totalShort>1e-9&&quote.minQty>0&&totalShort<quote.minQty,
+      missingSupplier=totalShort>1e-9&&quote.missing,
+      isDiscretePack=quote.isDiscretePack;
 
     total+=cost;
 
     const gp={
       kind:g.kind,id:g.id,requirements:detail,
       totalNeed,totalAllocatedStock,totalShort,
-      moq,packs,ordered,cost,excess,belowMoq,missingSupplier
+      moq:quote.minQty,packs,ordered,cost,excess,belowMoq,missingSupplier,isDiscretePack
     };
     groupPlans.push(gp);
 
@@ -305,7 +346,7 @@ function calcPurchasePlan(useStock=true){
         groupKey:g.kind+'|'+g.id,
         groupTotalNeed:totalNeed,
         groupTotalShort:totalShort,
-        moq,packs,ordered,
+        moq:quote.minQty,packs,ordered,
         cost:idx===0?cost:0,
         groupCost:cost,
         excess,
@@ -348,8 +389,8 @@ function renderPurchaseCalc(){
       : g.missingSupplier
         ? 'kein Lieferant / keine Bestellmenge'
         : g.belowMoq
-          ? `Gesamt fehlen ${g.totalShort} · MOQ ${g.moq} → einmal ${g.ordered} bestellen`
-          : `Gesamt fehlen ${g.totalShort} · MOQ/Pack ${g.moq} → einmal ${g.ordered} bestellen`;
+          ? `Gesamt fehlen ${g.totalShort} · Mindestmenge ${g.moq} → ${g.ordered} bestellen`
+          : g.isDiscretePack?`Gesamt fehlen ${g.totalShort} · Pack/Set ${g.moq} → ${g.ordered} bestellen`:`Gesamt fehlen ${g.totalShort} · Mindestmenge ${g.moq} erreicht → ${g.ordered} stückgenau bestellen`;
 
     return `<div class="purchase-item-group">
       <div class="purchase-item-group-head">
@@ -614,13 +655,12 @@ function runRealReinvestmentForecast(){
     });
 
     reorderGroups.forEach(g=>{
-      const base=planningBaseOrder(g.kind,g.id);
-      if(base.qty<=0)return;
-
       const totalMissing=g.needs.reduce((a,x)=>a+x.missing,0),
-        packs=Math.max(1,Math.ceil(totalMissing/base.qty)),
-        qty=packs*base.qty,
-        cost=packs*base.cost;
+        quote=planningOrderQuote(g.kind,g.id,totalMissing),
+        qty=quote.orderedQty,
+        cost=quote.cost,
+        packs=quote.orderUnits;
+      if(quote.missing||qty<=0)return;
 
       let remaining=qty;
       g.needs.forEach(r=>{
@@ -642,7 +682,7 @@ function runRealReinvestmentForecast(){
       const colors=g.needs.map(x=>x.color||'neutral').join(', ');
       events.push({
         week,
-        text:`${g.id} gemeinsam nachbestellen · ${qty} (Bedarf Farben: ${colors}; MOQ/Pack ${base.qty})`,
+        text:`${g.id} gemeinsam nachbestellen · ${qty} (Bedarf Farben: ${colors}; Mindestmenge ${quote.minQty}${quote.isDiscretePack?' · Pack/Set':' · danach stückgenau'})`,
         amount:-cost
       })
     });
@@ -689,6 +729,7 @@ function bindSalesPlanningUi(){
   ensureSalesPlanning();
   const add=$('#purchaseCalcAddBtn');if(!add)return;
   add.onclick=()=>purchaseCalcAddRow();
+  const addAll=$('#purchaseCalcAddAllVariantsBtn');if(addAll)addAll.onclick=purchaseCalcAddAllVariants;
   $('#purchaseCalcUseStock').onchange=renderPurchaseCalc;
   ['forecastLeadWeeks','forecastSafetyWeeks','forecastThresholdPct','forecastHorizonWeeks'].forEach(id=>$('#'+id).onchange=()=>{
     state.salesPlanning.leadWeeks=Math.max(0,num($('#forecastLeadWeeks').value,3));
