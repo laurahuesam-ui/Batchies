@@ -141,6 +141,61 @@ function planningBaseOrder(kind,id){
   if(!s)return{qty:0,cost:0};
   return{qty:Math.max(.001,supplierQtyBase(s)),cost:Math.max(0,supplierOrderCost(s))}
 }
+function planningItemColors(kind,id){
+  if(kind!=='PID')return [];
+  return normalizeProductColors(state.products.find(x=>x.pid===id)?.colors)
+}
+function planningSupplierOrderCostForQty(s,qty){
+  if(!s||qty<=0)return 0;
+  const q=Math.max(1,num(qty,1)),
+    ship=supplierShippingForQty(s,q),
+    goods=s.priceType==='set'
+      ? (q/Math.max(1,num(s.setQty,1)))*num(s.setPrice)
+      : s.priceType==='consumable'
+        ? (q/supplierQtyBase(s))*num(s.purchasePrice)
+        : supplierTierUnitPrice(s,q)*q,
+    base=goods+ship.shipping,
+    customs=(s.customs&&!ship.includesCustoms)?base*.12:0;
+  return base+customs
+}
+function planningSetComposition(kind,id,s){
+  if(!s||s.priceType!=='set')return {};
+  const colors=planningItemColors(kind,id),setQty=Math.max(1,num(s.setQty,1));
+  if(!colors.length)return {'':setQty};
+
+  const custom=s.setColorDistribution&&typeof s.setColorDistribution==='object'?s.setColorDistribution:null;
+  if(custom){
+    const out={};colors.forEach(c=>out[c]=Math.max(0,num(custom[c])));
+    if(Object.values(out).reduce((a,x)=>a+x,0)>0)return out
+  }
+
+  const each=setQty/colors.length,out={};
+  colors.forEach(c=>out[c]=each);
+  return out
+}
+function planningPieceOrder(kind,id,totalShort,s){
+  if(totalShort<=1e-9||!s)return{ordered:0,cost:0,moq:0};
+  const moq=Math.max(1,num(s.minOrderQty,1)),
+    ordered=Math.max(moq,Math.ceil(totalShort-1e-9));
+  return{ordered,cost:planningSupplierOrderCostForQty(s,ordered),moq}
+}
+function planningSetOrder(kind,id,requirements,s){
+  const composition=planningSetComposition(kind,id,s),
+    setQty=Math.max(1,num(s.setQty,1));
+  let setsNeeded=0;
+
+  requirements.forEach(r=>{
+    if(r.short<=1e-9)return;
+    const perSet=Math.max(0,num(composition[r.color||'']));
+    if(perSet<=0){setsNeeded=Infinity;return}
+    setsNeeded=Math.max(setsNeeded,Math.ceil(r.short/perSet-1e-9))
+  });
+
+  if(!Number.isFinite(setsNeeded))return{sets:0,ordered:0,cost:0,setQty,composition,impossible:true};
+  const ordered=setsNeeded*setQty;
+  return{sets:setsNeeded,ordered,cost:setsNeeded?planningSupplierOrderCostForQty(s,ordered):0,setQty,composition,impossible:false}
+}
+
 function planningOrderQuote(kind,id,requiredQty){
   const s=planningPreferredSupplier(kind,id);
   if(!s)return{minQty:0,orderedQty:0,cost:0,orderUnits:0,isDiscretePack:false,missing:true};
@@ -213,7 +268,7 @@ function purchaseCalcAddAllVariants(){
     existing.add(k);added++
   });
   persistSalesPlanning();renderPurchaseCalcRows();renderPurchaseCalc();
-  const status=$('#purchaseCalcBulkStatus');if(status)status.textContent=added?`✓ ${added} Farbvarianten hinzugefügt`:'✓ Alle Farbvarianten sind bereits ausgewählt'
+  return added
 }
 
 function purchaseCalcBatchOptions(selected){return state.batches.filter(b=>batchSaleVariants(b).length).map(b=>`<option value="${esc(b.key)}" ${b.key===selected?'selected':''}>${esc(b.bid)} · ${esc(b.name)}</option>`).join('')}
@@ -250,111 +305,65 @@ function aggregatePurchaseRequirements(){
   return [...map.values()]
 }
 function calcPurchasePlan(useStock=true){
-  // Requirements stay color-specific for transparency, but purchasing is grouped
-  // by ITEM (PID/VID). MOQ/pack quantity is therefore applied exactly once per item.
-  const reqs=aggregatePurchaseRequirements();
-
-  const groups=new Map();
+  const reqs=aggregatePurchaseRequirements(),groups=new Map();
   reqs.forEach(r=>{
-    const gk=r.kind+'|'+r.id;
-    if(!groups.has(gk))groups.set(gk,{kind:r.kind,id:r.id,requirements:[]});
-    groups.get(gk).requirements.push({...r})
+    const k=r.kind+'|'+r.id;
+    if(!groups.has(k))groups.set(k,{kind:r.kind,id:r.id,requirements:[]});
+    groups.get(k).requirements.push({...r})
   });
 
-  let total=0;
-  const lines=[],groupPlans=[];
-
+  let total=0;const groupPlans=[];
   groups.forEach(g=>{
-
-    // Real stock must be allocated only once. Exact-color inventory is consumed
-    // first; neutral inventory is a shared pool and cannot be counted twice.
+    const s=planningPreferredSupplier(g.kind,g.id),priceType=s?.priceType||'unit';
     let neutralStock=useStock?realStockQty(g.kind,g.id,'',true):0;
-    const colorStock={};
 
-    g.requirements.forEach(r=>{
-      if(r.color){
-        colorStock[r.color]=useStock?realStockQty(g.kind,g.id,r.color,true):0
-      }
-    });
-
-    let totalNeed=0,totalAllocatedStock=0,totalShort=0;
-    const detail=[];
-
-    // deterministic: colored positions first, neutral position last
-    const orderedReqs=[...g.requirements].sort((a,b)=>{
+    const details=[...g.requirements].sort((a,b)=>{
       if(!!a.color!==!!b.color)return a.color?-1:1;
       return String(a.color||'').localeCompare(String(b.color||''),'de')
-    });
-
-    orderedReqs.forEach(r=>{
-      totalNeed+=r.need;
-      let remaining=r.need, exactUsed=0, neutralUsed=0;
-
+    }).map(r=>{
+      let remaining=r.need,stockUsed=0;
       if(r.color){
-        const exact=Math.max(0,num(colorStock[r.color]));
-        exactUsed=Math.min(exact,remaining);
-        colorStock[r.color]=exact-exactUsed;
-        remaining-=exactUsed;
-
-        neutralUsed=Math.min(neutralStock,remaining);
-        neutralStock-=neutralUsed;
-        remaining-=neutralUsed
-      }else{
-        neutralUsed=Math.min(neutralStock,remaining);
-        neutralStock-=neutralUsed;
-        remaining-=neutralUsed
+        const exact=useStock?realStockQty(g.kind,g.id,r.color,true):0,
+          useExact=Math.min(exact,remaining);
+        stockUsed+=useExact;remaining-=useExact
       }
-
-      const allocatedStock=exactUsed+neutralUsed,
-        short=Math.max(0,remaining);
-
-      totalAllocatedStock+=allocatedStock;
-      totalShort+=short;
-
-      detail.push({
-        ...r,
-        stock:allocatedStock,
-        exactStockUsed:exactUsed,
-        neutralStockUsed:neutralUsed,
-        short
-      })
+      const useNeutral=Math.min(neutralStock,remaining);
+      stockUsed+=useNeutral;neutralStock-=useNeutral;remaining-=useNeutral;
+      return{...r,stock:stockUsed,short:Math.max(0,remaining)}
     });
 
-    // Apply MOQ exactly once per PID/VID. For ordinary piece-priced products
-    // MOQ is a MINIMUM, not a pack size: need 6 with MOQ 5 => order 6.
-    const quote=planningOrderQuote(g.kind,g.id,totalShort),
-      ordered=quote.orderedQty,
-      cost=quote.cost,
-      packs=quote.orderUnits,
-      excess=Math.max(0,ordered-totalShort),
-      belowMoq=totalShort>1e-9&&quote.minQty>0&&totalShort<quote.minQty,
-      missingSupplier=totalShort>1e-9&&quote.missing,
-      isDiscretePack=quote.isDiscretePack;
+    const totalNeed=details.reduce((a,x)=>a+x.need,0),
+      totalAllocatedStock=details.reduce((a,x)=>a+x.stock,0),
+      totalShort=details.reduce((a,x)=>a+x.short,0);
 
-    total+=cost;
+    let ordered=0,cost=0,moq=0,sets=0,composition=null,impossible=false;
 
-    const gp={
-      kind:g.kind,id:g.id,requirements:detail,
-      totalNeed,totalAllocatedStock,totalShort,
-      moq:quote.minQty,packs,ordered,cost,excess,belowMoq,missingSupplier,isDiscretePack
-    };
-    groupPlans.push(gp);
+    if(totalShort>1e-9&&s){
+      if(priceType==='set'){
+        const o=planningSetOrder(g.kind,g.id,details,s);
+        ordered=o.ordered;cost=o.cost;sets=o.sets;composition=o.composition;impossible=o.impossible
+      }else if(priceType==='consumable'){
+        const pack=Math.max(.0001,supplierQtyBase(s)),packs=Math.ceil(totalShort/pack-1e-9);
+        ordered=packs*pack;cost=packs*supplierOrderCost(s);moq=pack
+      }else{
+        const o=planningPieceOrder(g.kind,g.id,totalShort,s);
+        ordered=o.ordered;cost=o.cost;moq=o.moq
+      }
+    }
 
-    detail.forEach((d,idx)=>{
-      lines.push({
-        ...d,
-        groupKey:g.kind+'|'+g.id,
-        groupTotalNeed:totalNeed,
-        groupTotalShort:totalShort,
-        moq:quote.minQty,packs,ordered,
-        cost:idx===0?cost:0,
-        groupCost:cost,
-        excess,
-        belowMoq,
-        missingSupplier,
-        costOwner:idx===0
-      })
-    })
+    const arrivals={};
+    if(priceType==='set'&&composition){
+      Object.entries(composition).forEach(([c,n])=>arrivals[c]=n*sets)
+    }else{
+      details.forEach(d=>{if(d.short>1e-9)arrivals[d.color||'']=(arrivals[d.color||'']||0)+d.short});
+      const allocated=Object.values(arrivals).reduce((a,x)=>a+x,0);
+      if(ordered>allocated)arrivals['']=(arrivals['']||0)+(ordered-allocated)
+    }
+
+    const gp={kind:g.kind,id:g.id,priceType,requirements:details,totalNeed,totalAllocatedStock,totalShort,
+      ordered,cost,moq,sets,composition,arrivals,excess:Math.max(0,ordered-totalShort),
+      missingSupplier:totalShort>1e-9&&!s,impossible};
+    total+=cost;groupPlans.push(gp)
   });
 
   groupPlans.sort((a,b)=>{
@@ -362,52 +371,42 @@ function calcPurchasePlan(useStock=true){
     if(ak!==bk)return ak-bk;
     return parseIdNumber(a.id,a.kind)-parseIdNumber(b.id,b.kind)
   });
-
-  lines.sort((a,b)=>{
-    const ak=a.kind==='PID'?0:1,bk=b.kind==='PID'?0:1;
-    if(ak!==bk)return ak-bk;
-    const ai=parseIdNumber(a.id,a.kind),bi=parseIdNumber(b.id,b.kind);
-    if(ai!==bi)return ai-bi;
-    return String(a.color||'').localeCompare(String(b.color||''),'de')
-  });
-
-  return{
-    lines,groupPlans,total,
-    missing:groupPlans.some(x=>x.missingSupplier)
-  }
+  return{groupPlans,total,missing:groupPlans.some(g=>g.missingSupplier||g.impossible)}
 }
 function renderPurchaseCalc(){
   const el=$('#purchaseCalcResult');if(!el)return;
-  const useStock=$('#purchaseCalcUseStock')?.checked!==false,
-    p=calcPurchasePlan(useStock),
+  const useStock=$('#purchaseCalcUseStock')?.checked!==false,p=calcPurchasePlan(useStock),
     totalNeeded=p.groupPlans.reduce((a,x)=>a+x.totalNeed,0),
     covered=p.groupPlans.filter(x=>x.totalShort<=1e-9).length;
 
-  const groupsHtml=p.groupPlans.map(g=>{
-    const orderText=g.totalShort<=1e-9
-      ? '✓ vollständig aus Lager'
-      : g.missingSupplier
-        ? 'kein Lieferant / keine Bestellmenge'
-        : g.belowMoq
-          ? `Gesamt fehlen ${g.totalShort} · Mindestmenge ${g.moq} → ${g.ordered} bestellen`
-          : g.isDiscretePack?`Gesamt fehlen ${g.totalShort} · Pack/Set ${g.moq} → ${g.ordered} bestellen`:`Gesamt fehlen ${g.totalShort} · Mindestmenge ${g.moq} erreicht → ${g.ordered} stückgenau bestellen`;
-
+  const groups=p.groupPlans.map(g=>{
+    let order='✓ vollständig aus Lager';
+    if(g.totalShort>1e-9){
+      if(g.missingSupplier)order='kein Lieferant';
+      else if(g.impossible)order='Set enthält benötigte Farbe nicht';
+      else if(g.priceType==='set'){
+        const comp=Object.entries(g.composition||{}).map(([c,n])=>`${c||'neutral'} ${n}/Set`).join(' · ');
+        order=`${g.sets} komplettes Set${g.sets===1?'':'s'} = ${g.ordered} Stück · ${comp}`
+      }else if(g.priceType==='consumable'){
+        order=`${g.totalShort} fehlen · feste Packgröße ${g.moq} → ${g.ordered} bestellen`
+      }else{
+        order=g.totalShort<g.moq
+          ? `${g.totalShort} fehlen · MOQ ${g.moq} → ${g.moq} bestellen`
+          : `${g.totalShort} fehlen · MOQ ${g.moq} erreicht → ${g.ordered} Stück bestellen`
+      }
+    }
+    const arrival=Object.entries(g.arrivals||{}).filter(([,n])=>n>1e-9).map(([c,n])=>`${c||'frei/neutral'} ${Number.isInteger(n)?n:n.toFixed(2)}`).join(' · ');
     return `<div class="purchase-item-group">
       <div class="purchase-item-group-head">
         <div><span class="idchip">${esc(g.id)}</span> <strong>${esc(warehouseItemName(g.kind,g.id))}</strong></div>
-        <div class="tiny">Gesamtbedarf ${g.totalNeed} · aus Lager ${g.totalAllocatedStock}</div>
-        <div class="${g.totalShort<=1e-9?'positive':g.missingSupplier?'negative':''}"><strong>${orderText}</strong></div>
-        <div class="money"><strong>${g.missingSupplier?'–':euro(g.cost)}</strong></div>
+        <div class="tiny">Gesamtbedarf ${g.totalNeed} · Lager ${g.totalAllocatedStock}</div>
+        <div><strong>${order}</strong></div>
+        <div class="money"><strong>${g.missingSupplier||g.impossible?'–':euro(g.cost)}</strong></div>
       </div>
-      <div class="purchase-color-lines">
-        ${g.requirements.map(x=>`<div class="purchase-color-line">
-          <span>${x.color?warehouseColorChip(x.color):warehouseColorChip('')}</span>
-          <span>Bedarf ${x.need}</span>
-          <span>Lager zugeordnet ${x.stock}</span>
-          <span>${x.short>1e-9?`fehlen ${x.short}`:'✓ gedeckt'}</span>
-        </div>`).join('')}
-      </div>
-      ${g.excess>1e-9?`<div class="tiny" style="margin-top:5px">Übermenge aus gemeinsamer Bestellung: ${g.excess}. Diese ist nicht einer Farbe fest zugeordnet und steht als gemeinsamer Restbestand zur Verfügung.</div>`:''}
+      <div class="purchase-color-lines">${g.requirements.map(x=>`<div class="purchase-color-line">
+        <span>${x.color?warehouseColorChip(x.color):warehouseColorChip('')}</span><span>Bedarf ${x.need}</span><span>Lager ${x.stock}</span><span>${x.short?`fehlen ${x.short}`:'✓ gedeckt'}</span>
+      </div>`).join('')}</div>
+      ${arrival?`<div class="tiny" style="margin-top:5px"><strong>Bestellung liefert:</strong> ${esc(arrival)}</div>`:''}
     </div>`
   }).join('');
 
@@ -415,9 +414,8 @@ function renderPurchaseCalc(){
     <div class="production-kpi"><div class="label">Zusätzlicher Einkauf</div><div class="value">${euro(p.total)}</div></div>
     <div class="production-kpi"><div class="label">Produkte/VIDs</div><div class="value">${p.groupPlans.length}</div></div>
     <div class="production-kpi"><div class="label">Komplett aus Lager</div><div class="value">${covered}</div></div>
-    <div class="production-kpi"><div class="label">Gesamtbedarf Einheiten</div><div class="value">${totalNeeded.toLocaleString('de-DE')}</div></div>
-  </div>
-  <div class="purchase-group-list">${groupsHtml||'<div class="empty">Keine Auswahl</div>'}</div>`
+    <div class="production-kpi"><div class="label">Gesamtbedarf</div><div class="value">${totalNeeded.toLocaleString('de-DE')}</div></div>
+  </div><div class="purchase-group-list">${groups||'<div class="empty">Keine Auswahl</div>'}</div>`
 }
 function weeklyRequirements(){
   const map=new Map();
@@ -594,33 +592,11 @@ function runRealReinvestmentForecast(){
   const hasRealStock=(state.realWarehouse||[]).length>0;
   // If no actual purchase exists yet, use the current purchase-calculator plan as the virtual initial buy.
   if(!hasRealStock){
-    const plan=calcPurchasePlan(false);
-    cash-=plan.total;
-
-    // Allocate the one combined item-order to the required colors exactly once.
-    // The MOQ excess becomes neutral/shared inventory and can later serve any color.
-    plan.groupPlans.forEach(g=>{
-      if(g.ordered<=0)return;
-      let remainingOrdered=g.ordered;
-
-      g.requirements.forEach(r=>{
-        const allocate=Math.min(r.short,remainingOrdered);
-        if(allocate>0){
-          forecastAddOrder(stock,r,allocate);
-          remainingOrdered-=allocate
-        }
-      });
-
-      if(remainingOrdered>1e-9){
-        forecastAddOrder(stock,{kind:g.kind,id:g.id,color:''},remainingOrdered)
-      }
-    });
-
-    if(plan.total>0)events.push({
-      week:0,
-      text:'Virtueller Ersteinkauf aus Einkaufsrechner · MOQ je PID/VID nur einmal angewendet',
-      amount:-plan.total
-    })
+    const plan=calcPurchasePlan(false);cash-=plan.total;
+    plan.groupPlans.forEach(g=>Object.entries(g.arrivals||{}).forEach(([color,qty])=>{
+      if(qty>1e-9)forecastAddOrder(stock,{kind:g.kind,id:g.id,color},qty)
+    }));
+    if(plan.total>0)events.push({week:0,text:'Virtueller Ersteinkauf · Stück-MOQ bzw. komplette Sets berücksichtigt',amount:-plan.total})
   }
   const horizon=currentForecastWeeks(),reqWeekly=weeklyRequirements();
   let totalForecastSales=0,totalReorders=0,reorderCost=0;
@@ -639,52 +615,38 @@ function runRealReinvestmentForecast(){
     // Reorder decision is color-aware, but the supplier order is ITEM-level:
     // all colors of the same PID/VID are combined before MOQ/pack quantity is applied.
     const reorderGroups=new Map();
-
     reqWeekly.forEach(r=>{
-      const current=forecastStockAvailable(stock,r.kind,r.id,r.color),
-        point=reorderPointFor(r);
+      const current=forecastStockAvailable(stock,r.kind,r.id,r.color),point=reorderPointFor(r);
       if(current>point+1e-9)return;
-
-      const target=point+r.weekly*Math.max(1,state.salesPlanning.leadWeeks),
-        missing=Math.max(0,target-current);
+      const target=point+r.weekly*Math.max(1,state.salesPlanning.leadWeeks),missing=Math.max(0,target-current);
       if(missing<=1e-9)return;
-
-      const gk=r.kind+'|'+r.id;
-      if(!reorderGroups.has(gk))reorderGroups.set(gk,{kind:r.kind,id:r.id,needs:[]});
-      reorderGroups.get(gk).needs.push({...r,current,point,target,missing})
+      const k=r.kind+'|'+r.id;
+      if(!reorderGroups.has(k))reorderGroups.set(k,{kind:r.kind,id:r.id,needs:[]});
+      reorderGroups.get(k).needs.push({...r,short:missing})
     });
 
     reorderGroups.forEach(g=>{
-      const totalMissing=g.needs.reduce((a,x)=>a+x.missing,0),
-        quote=planningOrderQuote(g.kind,g.id,totalMissing),
-        qty=quote.orderedQty,
-        cost=quote.cost,
-        packs=quote.orderUnits;
-      if(quote.missing||qty<=0)return;
+      const s=planningPreferredSupplier(g.kind,g.id);if(!s)return;
+      let cost=0,arrivals={},text='';
 
-      let remaining=qty;
-      g.needs.forEach(r=>{
-        const allocation=Math.min(r.missing,remaining);
-        if(allocation>0){
-          forecastAddOrder(stock,r,allocation);
-          remaining-=allocation
-        }
-      });
-
-      if(remaining>1e-9){
-        forecastAddOrder(stock,{kind:g.kind,id:g.id,color:''},remaining)
+      if(s.priceType==='set'){
+        const o=planningSetOrder(g.kind,g.id,g.needs,s);
+        if(o.impossible||o.ordered<=0)return;
+        cost=o.cost;Object.entries(o.composition).forEach(([c,n])=>arrivals[c]=n*o.sets);
+        text=`${g.id} · ${o.sets} komplettes Set${o.sets===1?'':'s'} nachbestellen = ${o.ordered} Stück`
+      }else if(s.priceType==='consumable'){
+        const missing=g.needs.reduce((a,x)=>a+x.short,0),pack=supplierQtyBase(s),packs=Math.ceil(missing/pack-1e-9);
+        cost=packs*supplierOrderCost(s);arrivals['']=packs*pack;text=`${g.id} · ${packs*pack} als feste Packmenge nachbestellen`
+      }else{
+        const missing=g.needs.reduce((a,x)=>a+x.short,0),o=planningPieceOrder(g.kind,g.id,missing,s);
+        cost=o.cost;let left=o.ordered;
+        g.needs.forEach(r=>{const a=Math.min(r.short,left);if(a>0){arrivals[r.color||'']=(arrivals[r.color||'']||0)+a;left-=a}});
+        if(left>1e-9)arrivals['']=(arrivals['']||0)+left;
+        text=`${g.id} · ${o.ordered} Stück nachbestellen (MOQ ${o.moq}; darüber stückgenau)`
       }
 
-      cash-=cost;
-      totalReorders+=packs;
-      reorderCost+=cost;
-
-      const colors=g.needs.map(x=>x.color||'neutral').join(', ');
-      events.push({
-        week,
-        text:`${g.id} gemeinsam nachbestellen · ${qty} (Bedarf Farben: ${colors}; Mindestmenge ${quote.minQty}${quote.isDiscretePack?' · Pack/Set':' · danach stückgenau'})`,
-        amount:-cost
-      })
+      Object.entries(arrivals).forEach(([color,qty])=>{if(qty>1e-9)forecastAddOrder(stock,{kind:g.kind,id:g.id,color},qty)});
+      cash-=cost;totalReorders+=1;reorderCost+=cost;events.push({week,text,amount:-cost})
     });
     if(breakEvenWeek===null&&cash>=0)breakEvenWeek=week
   }
