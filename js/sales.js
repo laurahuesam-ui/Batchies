@@ -124,6 +124,8 @@ function ensureSalesPlanning(){
   if(!Array.isArray(state.salesPlanning.purchaseRows))state.salesPlanning.purchaseRows=[];
   if(!state.salesPlanning.variantRates||typeof state.salesPlanning.variantRates!=='object')state.salesPlanning.variantRates={};
   if(!state.salesPlanning.reorderOverrides||typeof state.salesPlanning.reorderOverrides!=='object')state.salesPlanning.reorderOverrides={};
+  state.salesPlanning.startWeeklySales=Math.max(0,num(state.salesPlanning.startWeeklySales,1.5));
+  state.salesPlanning.forecastScenario=String(state.salesPlanning.forecastScenario||'realistic');
   state.salesPlanning.leadWeeks=Math.max(0,num(state.salesPlanning.leadWeeks,3));
   state.salesPlanning.safetyWeeks=Math.max(0,num(state.salesPlanning.safetyWeeks,1));
   state.salesPlanning.thresholdPct=Math.max(0,Math.min(100,num(state.salesPlanning.thresholdPct,35)));
@@ -228,10 +230,34 @@ function actualWeeklyRate(batchKey,variant){
   if(!sales.length)return 1;
   return sales.reduce((a,x)=>a+num(x.qty),0)/8
 }
-function planningRate(batchKey,variant){
+function forecastScenarioTotal(){
+  ensureSalesPlanning();
+  const s=state.salesPlanning.forecastScenario||'realistic';
+  if(s==='cautious')return .5;
+  if(s==='good')return 3;
+  if(s==='custom')return Math.max(0,num(state.salesPlanning.startWeeklySales,1.5));
+  return 1.5
+}
+function totalActualSalesLast8Weeks(){
+  return allConfiguredVariants().reduce((a,x)=>a+actualWeeklyRate(x.b.key,x.variant),0)
+}
+function forecastVariantWeight(batchKey,variant){
   ensureSalesPlanning();
   const k=planningVariantKey(batchKey,variant),v=state.salesPlanning.variantRates[k];
-  return v===undefined?actualWeeklyRate(batchKey,variant):Math.max(0,num(v))
+  return v===undefined?1:Math.max(0,num(v,1))
+}
+function planningRate(batchKey,variant){
+  ensureSalesPlanning();
+  const vars=allConfiguredVariants(),actualTotal=totalActualSalesLast8Weeks();
+  // As soon as real sales exist, use their observed 8-week distribution/rate.
+  if(actualTotal>0){
+    const actual=actualWeeklyRate(batchKey,variant);
+    return actual
+  }
+  const total=forecastScenarioTotal(),
+    sumWeights=vars.reduce((a,x)=>a+forecastVariantWeight(x.b.key,x.variant),0);
+  if(sumWeights<=0)return 0;
+  return total*forecastVariantWeight(batchKey,variant)/sumWeights
 }
 function allConfiguredVariants(){
   const out=[];
@@ -241,12 +267,13 @@ function allConfiguredVariants(){
 function renderForecastVariantRates(){
   const el=$('#forecastVariantRates');if(!el)return;
   ensureSalesPlanning();
-  const vars=allConfiguredVariants();
-  el.innerHTML=vars.length?`<div class="forecast-rate-grid">${vars.map(x=>`<div class="forecast-rate-card">
+  const vars=allConfiguredVariants(),actualTotal=totalActualSalesLast8Weeks(),total=actualTotal>0?actualTotal:forecastScenarioTotal();
+  el.innerHTML=`<div class="info"><strong>${actualTotal>0?'Prognose aus echten Verkäufen':'Startprognose ohne Verkaufsdaten'}: ${total.toFixed(2).replace('.',',')} Verkäufe/Woche insgesamt</strong><br>${actualTotal>0?'Sobald echte Verkäufe vorhanden sind, wird die Rate aus den letzten 8 Wochen verwendet.':'Die Gesamtmenge wird über die Gewichte auf deine Batch-Farbvarianten verteilt. Gewicht 2 erhält doppelt so viel erwartete Nachfrage wie Gewicht 1.'}</div>
+  ${vars.length?`<div class="forecast-rate-grid">${vars.map(x=>`<div class="forecast-rate-card">
     <div><strong>${esc(x.b.bid)} · ${esc(x.variant)}</strong></div>
-    <div class="rowline"><span class="tiny">Verkäufe/Woche</span><input class="forecast-rate-input" data-key="${esc(x.key)}" type="number" min="0" step="0.1" value="${planningRate(x.b.key,x.variant)}"></div>
-    <div class="tiny">Ist-Schätzung letzte 8 Wochen: ${actualWeeklyRate(x.b.key,x.variant).toFixed(2).replace('.',',')} / Woche</div>
-  </div>`).join('')}</div>`:'<div class="empty"><strong>Keine Verkaufsvarianten angelegt</strong></div>';
+    <div class="rowline"><span class="tiny">Gewichtung</span><input class="forecast-rate-input" data-key="${esc(x.key)}" type="number" min="0" step="0.1" value="${forecastVariantWeight(x.b.key,x.variant)}"></div>
+    <div class="tiny">Prognose: ${planningRate(x.b.key,x.variant).toFixed(2).replace('.',',')} / Woche · Ist letzte 8 Wochen: ${actualWeeklyRate(x.b.key,x.variant).toFixed(2).replace('.',',')}</div>
+  </div>`).join('')}</div>`:'<div class="empty"><strong>Keine Verkaufsvarianten angelegt</strong></div>'}`;
   $$('.forecast-rate-input').forEach(inp=>inp.onchange=()=>{state.salesPlanning.variantRates[inp.dataset.key]=Math.max(0,num(inp.value));persistSalesPlanning();renderForecastAll()})
 }
 function purchaseCalcAddRow(row=null){
@@ -684,6 +711,10 @@ function renderForecastAll(){
   if(pct)pct.value=state.salesPlanning.thresholdPct;
   if(hor)hor.value=state.salesPlanning.horizonWeeks;
   if(preset)preset.value=state.salesPlanning.horizonPreset||'52w';
+  const scenario=$('#forecastScenario'),startSales=$('#forecastStartWeeklySales'),startWrap=$('#forecastStartWeeklyWrap');
+  if(scenario)scenario.value=state.salesPlanning.forecastScenario||'realistic';
+  if(startSales)startSales.value=state.salesPlanning.startWeeklySales;
+  if(startWrap)startWrap.classList.toggle('hidden',(state.salesPlanning.forecastScenario||'realistic')!=='custom');
   if(wrap)wrap.classList.toggle('hidden',(state.salesPlanning.horizonPreset||'52w')!=='custom');
   renderForecastVariantRates();renderForecastReorderTable();renderRealReinvestmentForecast()
 }
@@ -703,6 +734,13 @@ function bindSalesPlanningUi(){
   $('#forecastHorizonPreset').onchange=()=>{
     state.salesPlanning.horizonPreset=$('#forecastHorizonPreset').value;
     persistSalesPlanning();renderForecastAll()
+  };
+  const scenario=$('#forecastScenario');if(scenario)scenario.onchange=()=>{
+    state.salesPlanning.forecastScenario=scenario.value;persistSalesPlanning();renderForecastAll()
+  };
+  const startSales=$('#forecastStartWeeklySales');if(startSales)startSales.onchange=()=>{
+    state.salesPlanning.startWeeklySales=Math.max(0,num(startSales.value,1.5));
+    state.salesPlanning.forecastScenario='custom';persistSalesPlanning();renderForecastAll()
   };
   $('#forecastRecalcBtn').onclick=renderForecastAll;
   renderPurchaseCalcRows();renderPurchaseCalc();renderForecastAll()
