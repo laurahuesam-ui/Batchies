@@ -227,8 +227,13 @@ function planningOrderQuote(kind,id,requiredQty){
 function actualWeeklyRate(batchKey,variant){
   const cutoff=Date.now()-8*7*24*3600*1000;
   const sales=(state.salesHistory||[]).filter(x=>x.batchKey===batchKey&&x.color===variant&&new Date(x.soldAt).getTime()>=cutoff);
-  if(!sales.length)return 1;
+  // No booked sale means ZERO actual sales. Never invent a fallback sale here:
+  // the start scenario remains active until a real sale exists in salesHistory.
+  if(!sales.length)return 0;
   return sales.reduce((a,x)=>a+num(x.qty),0)/8
+}
+function hasAnyBookedSale(){
+  return Array.isArray(state.salesHistory)&&state.salesHistory.some(x=>num(x.qty)>0&&x.soldAt)
 }
 function forecastScenarioTotal(){
   ensureSalesPlanning();
@@ -249,10 +254,9 @@ function forecastVariantWeight(batchKey,variant){
 function planningRate(batchKey,variant){
   ensureSalesPlanning();
   const vars=allConfiguredVariants(),actualTotal=totalActualSalesLast8Weeks();
-  // As soon as real sales exist, use their observed 8-week distribution/rate.
-  if(actualTotal>0){
-    const actual=actualWeeklyRate(batchKey,variant);
-    return actual
+  // Start forecast stays active until the first REAL sale is booked.
+  if(hasAnyBookedSale()){
+    return actualWeeklyRate(batchKey,variant)
   }
   const total=forecastScenarioTotal(),
     sumWeights=vars.reduce((a,x)=>a+forecastVariantWeight(x.b.key,x.variant),0);
@@ -267,8 +271,8 @@ function allConfiguredVariants(){
 function renderForecastVariantRates(){
   const el=$('#forecastVariantRates');if(!el)return;
   ensureSalesPlanning();
-  const vars=allConfiguredVariants(),actualTotal=totalActualSalesLast8Weeks(),total=actualTotal>0?actualTotal:forecastScenarioTotal();
-  el.innerHTML=`<div class="info"><strong>${actualTotal>0?'Prognose aus echten Verkäufen':'Startprognose ohne Verkaufsdaten'}: ${total.toFixed(2).replace('.',',')} Verkäufe/Woche insgesamt</strong><br>${actualTotal>0?'Sobald echte Verkäufe vorhanden sind, wird die Rate aus den letzten 8 Wochen verwendet.':'Die Gesamtmenge wird über die Gewichte auf deine Batch-Farbvarianten verteilt. Gewicht 2 erhält doppelt so viel erwartete Nachfrage wie Gewicht 1.'}</div>
+  const vars=allConfiguredVariants(),hasSales=hasAnyBookedSale(),actualTotal=totalActualSalesLast8Weeks(),total=hasSales?actualTotal:forecastScenarioTotal();
+  el.innerHTML=`<div class="info"><strong>${hasSales?'Prognose aus gebuchten Verkäufen':'Startprognose aktiv'}: ${total.toFixed(2).replace('.',',')} Verkäufe/Woche insgesamt</strong><br>${hasSales?'Es gibt mindestens einen tatsächlich gebuchten Verkauf. Deshalb verwendet die Prognose jetzt die Verkaufsrate der letzten 8 Wochen.':'Noch kein Verkauf wurde unter „Verkäufe“ gebucht. Deshalb bleibt dein ausgewähltes Start-Szenario aktiv; vorhandene Batches, Varianten oder Lagerbestände zählen NICHT als Verkäufe.'}</div>
   ${vars.length?`<div class="forecast-rate-grid">${vars.map(x=>`<div class="forecast-rate-card">
     <div><strong>${esc(x.b.bid)} · ${esc(x.variant)}</strong></div>
     <div class="rowline"><span class="tiny">Gewichtung</span><input class="forecast-rate-input" data-key="${esc(x.key)}" type="number" min="0" step="0.1" value="${forecastVariantWeight(x.b.key,x.variant)}"></div>
