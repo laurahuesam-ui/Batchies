@@ -210,11 +210,21 @@ function aggregatePurchaseRequirements(){
   return [...map.values()]
 }
 function calcPurchasePlan(useStock=true){
+  // IMPORTANT: aggregatePurchaseRequirements() has already summed EVERY selected
+  // batch/variant/quantity by kind + ID + color. MOQ is applied only once afterwards.
   const reqs=aggregatePurchaseRequirements();let total=0;
   const lines=reqs.map(r=>{
-    const stock=useStock?availableForSaleRequirement(r):0,short=Math.max(0,r.need-stock),base=planningBaseOrder(r.kind,r.id);
-    const packs=short>1e-9&&base.qty>0?Math.ceil(short/base.qty):0,ordered=packs*base.qty,cost=packs*base.cost,excess=Math.max(0,stock+ordered-r.need);
-    total+=cost;return{...r,stock,short,baseQty:base.qty,packs,ordered,cost,excess,missingSupplier:short>0&&base.qty<=0}
+    const stock=useStock?availableForSaleRequirement(r):0,
+      short=Math.max(0,r.need-stock),
+      base=planningBaseOrder(r.kind,r.id),
+      moq=base.qty,
+      packs=short>1e-9&&moq>0?Math.ceil(short/moq):0,
+      ordered=packs*moq,
+      cost=packs*base.cost,
+      excess=Math.max(0,stock+ordered-r.need),
+      belowMoq=short>1e-9&&moq>0&&short<moq;
+    total+=cost;
+    return{...r,stock,short,baseQty:moq,moq,packs,ordered,cost,excess,belowMoq,missingSupplier:short>0&&moq<=0}
   });
   return{lines,total,missing:lines.some(x=>x.missingSupplier)}
 }
@@ -230,7 +240,7 @@ function renderPurchaseCalc(){
   </div>
   <div class="purchase-lines">${p.lines.map(x=>`<div class="purchase-line">
     <span><b>${esc(x.id)}</b></span><span>${esc(warehouseItemName(x.kind,x.id))}${x.color?' · '+esc(x.color):''}</span>
-    <span>Bedarf ${x.need}</span><span>Lager ${x.stock}</span><span>${x.short<=0?'✓ aus Lager':x.ordered+' bestellen'}</span><strong>${x.missingSupplier?'kein Lieferant':euro(x.cost)}</strong>
+    <span>Bedarf ${x.need}</span><span>Lager ${x.stock}</span><span>${x.short<=0?'✓ aus Lager':(x.belowMoq?`MOQ ${x.moq} → ${x.ordered} bestellen`:`${x.ordered} bestellen · MOQ ${x.moq}`)}</span><strong>${x.missingSupplier?'kein Lieferant':euro(x.cost)}</strong>
   </div>`).join('')||'<div class="empty">Keine Auswahl</div>'}</div>`
 }
 function weeklyRequirements(){
@@ -256,16 +266,51 @@ function reorderPointFor(r){
 }
 function renderForecastReorderTable(){
   const el=$('#forecastReorderTable');if(!el)return;ensureSalesPlanning();
+
   const rows=weeklyRequirements().map(r=>{
-    const stock=availableForSaleRequirement(r),point=reorderPointFor(r),weeks=r.weekly>0?stock/r.weekly:Infinity,k=planningStockKey(r.kind,r.id,r.color);
+    const stock=availableForSaleRequirement(r),
+      point=reorderPointFor(r),
+      weeks=r.weekly>0?stock/r.weekly:Infinity,
+      k=planningStockKey(r.kind,r.id,r.color);
     return{...r,stock,point,weeks,k,alert:stock<=point+1e-9}
-  }).sort((a,b)=>(b.alert-a.alert)||(a.weeks-b.weeks));
-  el.innerHTML=`<div class="forecast-reorder-wrap"><table class="forecast-reorder-table"><thead><tr><th>ID</th><th>Artikel</th><th>Farbe</th><th>Bestand</th><th>Verbrauch/Woche</th><th>Reicht ca.</th><th>Auto-Nachbestellpunkt</th><th>Override</th><th>Status</th></tr></thead><tbody>${rows.map(x=>`<tr>
-    <td><span class="idchip">${esc(x.id)}</span></td><td>${esc(warehouseItemName(x.kind,x.id))}</td><td>${warehouseColorChip(x.color)}</td><td>${x.stock.toFixed(2)}</td><td>${x.weekly.toFixed(2)}</td><td>${Number.isFinite(x.weeks)?x.weeks.toFixed(1)+' Wo.':'∞'}</td><td>${x.point.toFixed(2)}</td>
+  }).sort((a,b)=>{
+    const ak=a.kind==='PID'?0:1,bk=b.kind==='PID'?0:1;
+    if(ak!==bk)return ak-bk;
+    const ai=parseIdNumber(a.id,a.kind),bi=parseIdNumber(b.id,b.kind);
+    if(ai!==bi)return ai-bi;
+    return String(a.color||'').localeCompare(String(b.color||''),'de')
+  });
+
+  const rowHtml=x=>`<tr>
+    <td><span class="idchip">${esc(x.id)}</span></td>
+    <td>${esc(warehouseItemName(x.kind,x.id))}</td>
+    <td>${warehouseColorChip(x.color)}</td>
+    <td>${x.stock.toFixed(2)}</td>
+    <td>${x.weekly.toFixed(2)}</td>
+    <td>${Number.isFinite(x.weeks)?x.weeks.toFixed(1)+' Wo.':'∞'}</td>
+    <td>${x.point.toFixed(2)}</td>
     <td><input class="reorder-override" data-key="${esc(x.k)}" type="number" min="0" step="0.1" placeholder="automatisch" value="${state.salesPlanning.reorderOverrides[x.k]??''}"></td>
     <td class="forecast-alert ${x.alert?'negative':'positive'}">${x.alert?'NACHBESTELLEN':'OK'}</td>
-  </tr>`).join('')}</tbody></table></div>`;
-  $$('.reorder-override').forEach(inp=>inp.onchange=()=>{if(inp.value==='')delete state.salesPlanning.reorderOverrides[inp.dataset.key];else state.salesPlanning.reorderOverrides[inp.dataset.key]=Math.max(0,num(inp.value));persistSalesPlanning();renderForecastAll()})
+  </tr>`;
+
+  const alerts=rows.filter(x=>x.alert),ok=rows.filter(x=>!x.alert);
+  const tableHead='<thead><tr><th>ID</th><th>Artikel</th><th>Farbe</th><th>Bestand</th><th>Verbrauch/Woche</th><th>Reicht ca.</th><th>Nachbestellpunkt</th><th>Override</th><th>Status</th></tr></thead>';
+
+  el.innerHTML=`
+    <div class="forecast-status-group">
+      <div class="forecast-table-title">Jetzt relevant (${alerts.length})</div>
+      ${alerts.length?`<div class="forecast-reorder-wrap"><table class="forecast-reorder-table">${tableHead}<tbody>${alerts.map(rowHtml).join('')}</tbody></table></div>`:'<div class="info">Aktuell muss nichts nachbestellt werden.</div>'}
+    </div>
+    <details class="forecast-ok-details">
+      <summary>OK-Positionen anzeigen (${ok.length})</summary>
+      ${ok.length?`<div class="forecast-reorder-wrap"><table class="forecast-reorder-table">${tableHead}<tbody>${ok.map(rowHtml).join('')}</tbody></table></div>`:'<div class="tiny">Keine weiteren Positionen.</div>'}
+    </details>`;
+
+  $$('.reorder-override').forEach(inp=>inp.onchange=()=>{
+    if(inp.value==='')delete state.salesPlanning.reorderOverrides[inp.dataset.key];
+    else state.salesPlanning.reorderOverrides[inp.dataset.key]=Math.max(0,num(inp.value));
+    persistSalesPlanning();renderForecastAll()
+  })
 }
 function estimatedSaleCashContribution(b,variant,actualPrice=null){
   const price=actualPrice===null?num(b.salePrice):num(actualPrice),c=batchCalc({...b,salePrice:price});
@@ -301,6 +346,31 @@ function forecastConsume(stock,r,amount){
   return left
 }
 function forecastAddOrder(stock,r,qty){const k=planningStockKey(r.kind,r.id,r.color);stock[k]=(stock[k]||0)+qty}
+function forecastPresetWeeks(preset){
+  const now=new Date();
+  if(preset==='4w')return 4;
+  if(preset==='3m')return 13;
+  if(preset==='6m')return 26;
+  if(preset==='eoy'){
+    const end=new Date(now.getFullYear(),11,31,23,59,59);
+    return Math.max(1,Math.ceil((end-now)/(7*24*3600*1000)))
+  }
+  if(preset==='52w')return 52;
+  return Math.max(1,Math.min(260,Math.floor(num(state.salesPlanning.horizonWeeks,52))))
+}
+function currentForecastWeeks(){
+  ensureSalesPlanning();
+  return forecastPresetWeeks(state.salesPlanning.horizonPreset||'52w')
+}
+function forecastPeriodLabel(){
+  const p=state.salesPlanning.horizonPreset||'52w';
+  if(p==='4w')return '4 Wochen';
+  if(p==='3m')return '3 Monate';
+  if(p==='6m')return '6 Monate';
+  if(p==='eoy')return 'bis Jahresende';
+  if(p==='52w')return '52 Wochen';
+  return currentForecastWeeks()+' Wochen'
+}
 function runRealReinvestmentForecast(){
   ensureSalesPlanning();
   let stock=cloneForecastStock(),cash=actualRecoveredCash()-reconstructedActualPurchaseCapital(),initialCash=cash,events=[],breakEvenWeek=cash>=0?0:null;
@@ -311,7 +381,7 @@ function runRealReinvestmentForecast(){
     plan.lines.forEach(x=>{if(x.ordered>0)forecastAddOrder(stock,x,x.ordered)});
     if(plan.total>0)events.push({week:0,text:'Virtueller Ersteinkauf aus Einkaufsrechner',amount:-plan.total})
   }
-  const horizon=Math.floor(state.salesPlanning.horizonWeeks),reqWeekly=weeklyRequirements();
+  const horizon=currentForecastWeeks(),reqWeekly=weeklyRequirements();
   let totalForecastSales=0,totalReorders=0,reorderCost=0;
   for(let week=1;week<=horizon;week++){
     // sales are expected values; consume fractional units for forecasting.
@@ -342,21 +412,37 @@ function runRealReinvestmentForecast(){
 }
 function renderRealReinvestmentForecast(){
   const el=$('#realReinvestmentForecast');if(!el)return;
-  const r=runRealReinvestmentForecast(),capital=reconstructedActualPurchaseCapital(),recovered=actualRecoveredCash();
+  const r=runRealReinvestmentForecast(),
+    capital=reconstructedActualPurchaseCapital(),
+    recovered=actualRecoveredCash(),
+    period=forecastPeriodLabel(),
+    netChange=r.cash-r.initialCash;
+
   el.innerHTML=`<div class="forecast-summary">
-    <div class="production-kpi"><div class="label">Echtes investiertes Einkaufskapital</div><div class="value">${euro(capital)}</div></div>
-    <div class="production-kpi"><div class="label">Durch Verkäufe zurückgeflossen</div><div class="value">${euro(recovered)}</div></div>
-    <div class="production-kpi"><div class="label">Amortisation</div><div class="value">${r.breakEvenWeek===null?'>'+state.salesPlanning.horizonWeeks+' Wo.':r.breakEvenWeek===0?'bereits erreicht':'ca. '+r.breakEvenWeek+' Wo.'}</div></div>
-    <div class="production-kpi"><div class="label">Prognose Verkäufe</div><div class="value">${r.totalForecastSales.toFixed(1)}</div></div>
-    <div class="production-kpi"><div class="label">Prognose Nachbestellungen</div><div class="value">${euro(r.reorderCost)}</div><div class="tiny">${r.totalReorders} Bestellpakete</div></div>
+    <div class="production-kpi"><div class="label">Bisher echtes Einkaufskapital</div><div class="value">${euro(capital)}</div></div>
+    <div class="production-kpi"><div class="label">Bisheriger Rückfluss aus Verkäufen</div><div class="value">${euro(recovered)}</div></div>
+    <div class="production-kpi"><div class="label">Voraussichtliche Amortisation</div><div class="value">${r.breakEvenWeek===null?'nicht innerhalb '+period:r.breakEvenWeek===0?'bereits erreicht':'in ca. '+r.breakEvenWeek+' Wo.'}</div></div>
+    <div class="production-kpi"><div class="label">Simulierte Verkäufe (${period})</div><div class="value">${r.totalForecastSales.toFixed(1)}</div></div>
+    <div class="production-kpi"><div class="label">Simulierte Nachbestellungen</div><div class="value">${euro(r.reorderCost)}</div><div class="tiny">${r.totalReorders} Bestellpakete</div></div>
   </div>
-  <div class="info"><strong>Forecast-Endsaldo nach ${state.salesPlanning.horizonWeeks} Wochen:</strong> ${euro(r.cash)}. ${r.breakEvenWeek===null?'Innerhalb des gewählten Horizonts noch nicht amortisiert.':'Break-even berücksichtigt simulierte Nachbestellungen.'}</div>
+  <div class="info">
+    <strong>Voraussichtliches frei verfügbares Geld nach ${period}: ${euro(r.cash)}</strong><br>
+    Das ist der simulierte Cash-Bestand nach Verkäufen und allen bis dahin nötigen Nachbestellungen. 
+    ${netChange>=0?`Gegenüber dem Start der Prognose steigt der freie Cash-Bestand um ${euro(netChange)}.`:`Gegenüber dem Start der Prognose sinkt der freie Cash-Bestand um ${euro(Math.abs(netChange))}.`}
+    ${r.breakEvenWeek===null?' Das bisher investierte Einkaufskapital wäre in diesem Zeitraum noch nicht vollständig zurückverdient.':' Der Break-even berücksichtigt auch simulierte Nachbestellungen.'}
+  </div>
   <details style="margin-top:10px"><summary>Prognostizierte Nachbestellereignisse (${r.events.length})</summary><div class="forecast-week-events">${r.events.map(e=>`<div class="forecast-event"><span>Woche ${e.week}</span><span>${esc(e.text)}</span><strong>${euro(e.amount)}</strong></div>`).join('')||'<div class="tiny">Keine Ereignisse.</div>'}</div></details>`
 }
 function renderForecastAll(){
   ensureSalesPlanning();
-  const lead=$('#forecastLeadWeeks'),safety=$('#forecastSafetyWeeks'),pct=$('#forecastThresholdPct'),hor=$('#forecastHorizonWeeks');
-  if(lead)lead.value=state.salesPlanning.leadWeeks;if(safety)safety.value=state.salesPlanning.safetyWeeks;if(pct)pct.value=state.salesPlanning.thresholdPct;if(hor)hor.value=state.salesPlanning.horizonWeeks;
+  const lead=$('#forecastLeadWeeks'),safety=$('#forecastSafetyWeeks'),pct=$('#forecastThresholdPct'),
+    hor=$('#forecastHorizonWeeks'),preset=$('#forecastHorizonPreset'),wrap=$('#forecastCustomWeeksWrap');
+  if(lead)lead.value=state.salesPlanning.leadWeeks;
+  if(safety)safety.value=state.salesPlanning.safetyWeeks;
+  if(pct)pct.value=state.salesPlanning.thresholdPct;
+  if(hor)hor.value=state.salesPlanning.horizonWeeks;
+  if(preset)preset.value=state.salesPlanning.horizonPreset||'52w';
+  if(wrap)wrap.classList.toggle('hidden',(state.salesPlanning.horizonPreset||'52w')!=='custom');
   renderForecastVariantRates();renderForecastReorderTable();renderRealReinvestmentForecast()
 }
 function bindSalesPlanningUi(){
@@ -368,9 +454,13 @@ function bindSalesPlanningUi(){
     state.salesPlanning.leadWeeks=Math.max(0,num($('#forecastLeadWeeks').value,3));
     state.salesPlanning.safetyWeeks=Math.max(0,num($('#forecastSafetyWeeks').value,1));
     state.salesPlanning.thresholdPct=Math.max(0,Math.min(100,num($('#forecastThresholdPct').value,35)));
-    state.salesPlanning.horizonWeeks=Math.max(4,Math.min(260,Math.floor(num($('#forecastHorizonWeeks').value,52))));
+    state.salesPlanning.horizonWeeks=Math.max(1,Math.min(260,Math.floor(num($('#forecastHorizonWeeks').value,52))));
     persistSalesPlanning();renderForecastAll()
   });
+  $('#forecastHorizonPreset').onchange=()=>{
+    state.salesPlanning.horizonPreset=$('#forecastHorizonPreset').value;
+    persistSalesPlanning();renderForecastAll()
+  };
   $('#forecastRecalcBtn').onclick=renderForecastAll;
   renderPurchaseCalcRows();renderPurchaseCalc();renderForecastAll()
 }

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#24513b">
 <meta name="description" content="Batchies – Produkt- und Batchentwicklung, Lieferantenvergleich und Etsy-Preiskalkulation.">
-<link rel="manifest" href="manifest.webmanifest?v=3.4.0">
+<link rel="manifest" href="manifest.webmanifest?v=3.4.1">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <title>Batchies – Produktentwicklung</title>
@@ -157,12 +157,15 @@
 .purchase-calc-rows{display:grid;gap:7px}.purchase-calc-row{display:grid;grid-template-columns:2fr 1.2fr .7fr 34px;gap:7px;align-items:end;border:1px solid var(--line);border-radius:10px;padding:8px}.purchase-calc-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:10px}.purchase-lines{max-height:420px;overflow:auto}.purchase-line{display:grid;grid-template-columns:90px minmax(180px,1fr) 110px 110px 110px 110px;gap:7px;align-items:center;font-size:12px;padding:6px 4px;border-bottom:1px solid var(--line)}
 .forecast-settings{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.forecast-rate-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:7px}.forecast-rate-card{border:1px solid var(--line);border-radius:10px;padding:8px;background:#fff}.forecast-rate-card .rowline{display:grid;grid-template-columns:1fr 95px;gap:7px;align-items:center}.forecast-reorder-wrap{max-height:480px;overflow:auto}.forecast-reorder-table{min-width:1050px}.forecast-alert{font-weight:800}.forecast-summary{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin-bottom:10px}.forecast-week-events{max-height:300px;overflow:auto;display:grid;gap:4px}.forecast-event{display:grid;grid-template-columns:80px 1fr auto;gap:8px;padding:5px 0;border-bottom:1px solid var(--line);font-size:12px}
 @media(max-width:900px){.purchase-calc-row{grid-template-columns:1fr 1fr}.purchase-calc-summary,.forecast-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.forecast-settings{grid-template-columns:repeat(2,minmax(0,1fr))}.purchase-line{grid-template-columns:80px 1fr 100px}.purchase-line>*:nth-child(n+4){display:none}}
+
+.forecast-ok-details{margin-top:10px}.forecast-ok-details summary{cursor:pointer;font-weight:700}.forecast-status-group{margin-top:8px}.forecast-table-title{font-weight:800;margin:4px 0 6px}
+.hidden{display:none!important}
 </style>
 </head>
 <body>
 <div class="app">
 <header class="topbar">
-  <div class="brand"><div class="logo">B</div><div><h1>Batchies</h1><div class="subtitle">Produktentwicklung & Stammdaten · v3.4.0</div></div></div>
+  <div class="brand"><div class="logo">B</div><div><h1>Batchies</h1><div class="subtitle">Produktentwicklung & Stammdaten · v3.4.1</div></div></div>
   <div class="actions"><button class="btn" id="exportBackupBtn">Backup</button><button class="btn" id="importBackupBtn">Import</button><button class="btn primary" id="addProductBtn">+ Produkt</button><button class="btn primary" id="addBatchBtn">+ Batch</button><input type="file" id="backupFile" accept="application/json" hidden></div>
 </header>
 <nav class="tabs"><button class="tab active" data-tab="overview">Übersicht</button><button class="tab" data-tab="products">Produkte</button><button class="tab" data-tab="packaging">Verpackung</button><button class="tab" data-tab="batches">Batches</button><button class="tab" data-tab="warehouse">Lager</button><button class="tab" data-tab="sales">Verkäufe</button><button class="tab" data-tab="fees">Gebühren & Kalkulation</button><button class="tab" data-tab="investments">Investitionen</button><button class="tab" data-tab="simulation">Einkaufs-Simulation</button><button class="tab" data-tab="data">Stammdaten & CSV</button></nav>
@@ -236,7 +239,7 @@
       <div class="field"><label>Lieferzeit (Wochen)</label><input id="forecastLeadWeeks" type="number" min="0" step="0.5" value="3"></div>
       <div class="field"><label>Sicherheitsbestand (Wochen)</label><input id="forecastSafetyWeeks" type="number" min="0" step="0.5" value="1"></div>
       <div class="field"><label>Restbestand-Schwelle (%)</label><input id="forecastThresholdPct" type="number" min="0" max="100" step="1" value="35"></div>
-      <div class="field"><label>Prognosehorizont (Wochen)</label><input id="forecastHorizonWeeks" type="number" min="4" max="260" step="1" value="52"></div>
+      <div class="field"><label>Prognosezeitraum</label><select id="forecastHorizonPreset"><option value="4w">4 Wochen</option><option value="3m">3 Monate</option><option value="6m">6 Monate</option><option value="eoy">Bis Jahresende</option><option value="52w" selected>52 Wochen</option><option value="custom">Eigene Wochenzahl</option></select></div><div class="field hidden" id="forecastCustomWeeksWrap"><label>Eigene Wochenzahl</label><input id="forecastHorizonWeeks" type="number" min="1" max="260" step="1" value="52"></div>
     </div>
     <div class="tiny" style="margin:6px 0 10px">Default: Nachbestellpunkt = max. aus Bedarf während Lieferzeit + Sicherheitswochen und einer 35-%-Bestandsschwelle. Bei sehr großen Gebinden wird die Prozentregel auf höchstens 8 Wochen erwarteten Verbrauch begrenzt. Alle Varianten-Verkaufsraten und Mindestbestände können überschrieben werden.</div>
     <h3 class="section-title">Erwartete Verkäufe pro Woche</h3>
@@ -405,20 +408,20 @@
   <div class="modal-foot"><button type="button" class="btn danger hidden" id="deletePackagingBtn">Verpackungsmaterial löschen</button><span style="flex:1"></span><button type="button" class="btn cancel-packaging-dialog">Abbrechen</button><button type="submit" class="btn primary" value="save" id="savePackagingBtn">Speichern</button></div>
 </form></dialog>
 
-<script src="js/category-data.js?v=3.4.0"></script>
-<script src="js/recovery-data.js?v=3.4.0"></script>
-<script src="js/config.js?v=3.4.0"></script>
-<script src="js/colors.js?v=3.4.0"></script>
-<script src="js/core.js?v=3.4.0"></script>
-<script src="js/categories.js?v=3.4.0"></script>
-<script src="js/pricing.js?v=3.4.0"></script>
-<script src="js/products.js?v=3.4.0"></script>
-<script src="js/batches.js?v=3.4.0"></script>
-<script src="js/batch-suggestions.js?v=3.4.0"></script>
-<script src="js/exports.js?v=3.4.0"></script>
-<script src="js/simulation.js?v=3.4.0"></script>
-<script src="js/packaging.js?v=3.4.0"></script>
-<script src="js/warehouse.js?v=3.4.0"></script>
-<script src="js/sales.js?v=3.4.0"></script>
-<script src="js/app.js?v=3.4.0"></script>
+<script src="js/category-data.js?v=3.4.1"></script>
+<script src="js/recovery-data.js?v=3.4.1"></script>
+<script src="js/config.js?v=3.4.1"></script>
+<script src="js/colors.js?v=3.4.1"></script>
+<script src="js/core.js?v=3.4.1"></script>
+<script src="js/categories.js?v=3.4.1"></script>
+<script src="js/pricing.js?v=3.4.1"></script>
+<script src="js/products.js?v=3.4.1"></script>
+<script src="js/batches.js?v=3.4.1"></script>
+<script src="js/batch-suggestions.js?v=3.4.1"></script>
+<script src="js/exports.js?v=3.4.1"></script>
+<script src="js/simulation.js?v=3.4.1"></script>
+<script src="js/packaging.js?v=3.4.1"></script>
+<script src="js/warehouse.js?v=3.4.1"></script>
+<script src="js/sales.js?v=3.4.1"></script>
+<script src="js/app.js?v=3.4.1"></script>
 </body></html>
