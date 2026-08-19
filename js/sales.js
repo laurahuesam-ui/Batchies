@@ -141,7 +141,7 @@ function planningPreferredSupplier(kind,id){
 function planningBaseOrder(kind,id){
   const s=planningPreferredSupplier(kind,id);
   if(!s)return{qty:0,cost:0};
-  return{qty:Math.max(.001,supplierQtyBase(s)),cost:Math.max(0,supplierOrderCost(s))}
+  return{qty:Math.max(.001,supplierCalcQty(s)),cost:Math.max(0,supplierOrderCost(s))}
 }
 function planningItemColors(kind,id){
   if(kind!=='PID')return [];
@@ -206,7 +206,8 @@ function planningSupplierOrderCostForQty(s,qty){
 function planningStrategicQuantities(s,requiredQty){
   const required=Math.max(1,Math.ceil(num(requiredQty,1))),
     minQty=Math.max(1,num(s?.minOrderQty,1)),
-    base=Math.max(required,minQty),
+    activeQty=Math.max(minQty,supplierCalcQty(s)),
+    base=Math.max(required,activeQty),
     // "sensible" extra quantity: at most +50% or +10 pieces, whichever is larger.
     // This prevents absurd jumps such as 37 -> 5000 only for a lower unit price.
     sensibleCap=base+Math.max(10,Math.ceil(base*.50)),
@@ -258,7 +259,8 @@ function planningOptimizePieceOrder(kind,id,totalShort,s){
   if(totalShort<=1e-9||!s)return{ordered:0,cost:0,moq:0,required:0,recommended:false};
 
   const moq=Math.max(1,num(s.minOrderQty,1)),
-    required=Math.max(moq,Math.ceil(totalShort-1e-9)),
+    activeQty=Math.max(moq,supplierCalcQty(s)),
+    required=Math.max(activeQty,Math.ceil(totalShort-1e-9)),
     candidates=planningStrategicQuantities(s,required).map(q=>{
       const cost=planningSupplierOrderCostForQty(s,q);
       return{qty:q,cost,unit:q>0?cost/q:Infinity,shipping:planningShippingForQty(s,q)}
