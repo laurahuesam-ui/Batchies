@@ -151,7 +151,8 @@ function planningShippingForQty(s,qty){
   const q=Math.max(1,num(qty,1)),
     pts=(s?.shippingPoints||[])
       .map(x=>({
-        qty:Math.max(1,num(x.qty,1)),
+        qty:supplierRawQtyToPieces(s,Math.max(1,num(x.qty,1))),
+        rawQty:Math.max(1,num(x.qty,1)),
         shipping:num(x.shipping),
         shippingWithCustoms:num(x.shippingWithCustoms)
       }))
@@ -205,7 +206,7 @@ function planningSupplierOrderCostForQty(s,qty){
 }
 function planningStrategicQuantities(s,requiredQty){
   const required=Math.max(1,Math.ceil(num(requiredQty,1))),
-    minQty=Math.max(1,num(s?.minOrderQty,1)),
+    minQty=supplierQtyBase(s),
     activeQty=Math.max(minQty,supplierCalcQty(s)),
     base=Math.max(required,activeQty),
     // "sensible" extra quantity: at most +50% or +10 pieces, whichever is larger.
@@ -231,13 +232,13 @@ function planningStrategicQuantities(s,requiredQty){
     // Price tiers are secondary when shipping points exist: only include a tier
     // if it lies inside the same sensible window.
     (s?.priceTiers||[]).forEach(t=>{
-      const q=Math.max(1,num(t.minQty,1));
+      const q=supplierRawQtyToPieces(s,Math.max(1,num(t.minQty,1)));
       if(q>=base&&q<=sensibleCap)candidates.add(q)
     })
   }else{
     // Without shipping points, nearby price tiers are the best available signal.
     (s?.priceTiers||[]).forEach(t=>{
-      const q=Math.max(1,num(t.minQty,1));
+      const q=supplierRawQtyToPieces(s,Math.max(1,num(t.minQty,1)));
       if(q>=base&&q<=sensibleCap)candidates.add(q)
     })
   }
@@ -258,9 +259,11 @@ function planningOrderComparison(s,requiredQty){
 function planningOptimizePieceOrder(kind,id,totalShort,s){
   if(totalShort<=1e-9||!s)return{ordered:0,cost:0,moq:0,required:0,recommended:false};
 
-  const moq=Math.max(1,num(s.minOrderQty,1)),
+  const factor=supplierUnitSetSize(s),
+    moq=supplierQtyBase(s),
     activeQty=Math.max(moq,supplierCalcQty(s)),
-    required=Math.max(activeQty,Math.ceil(totalShort-1e-9)),
+    demandRounded=supplierRawQtyToPieces(s,Math.max(1,supplierPiecesToRawQty(s,totalShort))),
+    required=Math.max(activeQty,demandRounded),
     candidates=planningStrategicQuantities(s,required).map(q=>{
       const cost=planningSupplierOrderCostForQty(s,q);
       return{qty:q,cost,unit:q>0?cost/q:Infinity,shipping:planningShippingForQty(s,q)}
