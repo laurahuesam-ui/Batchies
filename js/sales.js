@@ -147,10 +147,53 @@ function planningItemColors(kind,id){
   if(kind!=='PID')return [];
   return normalizeProductColors(state.products.find(x=>x.pid===id)?.colors)
 }
+function planningShippingForQty(s,qty){
+  const q=Math.max(1,num(qty,1)),
+    pts=(s?.shippingPoints||[])
+      .map(x=>({
+        qty:Math.max(1,num(x.qty,1)),
+        shipping:num(x.shipping),
+        shippingWithCustoms:num(x.shippingWithCustoms)
+      }))
+      .filter(x=>x.qty>0)
+      .sort((a,b)=>a.qty-b.qty);
+
+  if(!pts.length)return supplierShippingForQty(s,q);
+
+  const exact=pts.find(x=>Math.abs(x.qty-q)<1e-9);
+  if(exact){
+    if(exact.shippingWithCustoms>0)return{shipping:exact.shippingWithCustoms,includesCustoms:true,source:'Punkt'};
+    return{shipping:exact.shipping,includesCustoms:false,source:'Punkt'}
+  }
+
+  const lower=[...pts].reverse().find(x=>x.qty<q),
+    upper=pts.find(x=>x.qty>q);
+
+  // Between two measured shipping points, interpolate instead of falling back
+  // to the unrelated default shipping value.
+  if(lower&&upper){
+    const lowerVal=lower.shippingWithCustoms>0?lower.shippingWithCustoms:lower.shipping,
+      upperVal=upper.shippingWithCustoms>0?upper.shippingWithCustoms:upper.shipping,
+      t=(q-lower.qty)/(upper.qty-lower.qty),
+      value=lowerVal+(upperVal-lowerVal)*t,
+      includesCustoms=lower.shippingWithCustoms>0&&upper.shippingWithCustoms>0;
+    return{shipping:value,includesCustoms,source:`Interpolation ${lower.qty}–${upper.qty}`}
+  }
+
+  // Outside measured range: use nearest measured point rather than silently
+  // jumping back to totalShipping.
+  const nearest=lower||upper;
+  if(nearest){
+    const value=nearest.shippingWithCustoms>0?nearest.shippingWithCustoms:nearest.shipping;
+    return{shipping:value,includesCustoms:nearest.shippingWithCustoms>0,source:`nächster Versandpunkt ${nearest.qty}`}
+  }
+
+  return supplierShippingForQty(s,q)
+}
 function planningSupplierOrderCostForQty(s,qty){
   if(!s||qty<=0)return 0;
   const q=Math.max(1,num(qty,1)),
-    ship=supplierShippingForQty(s,q),
+    ship=planningShippingForQty(s,q),
     goods=s.priceType==='set'
       ? (q/Math.max(1,num(s.setQty,1)))*num(s.setPrice)
       : s.priceType==='consumable'
@@ -159,6 +202,75 @@ function planningSupplierOrderCostForQty(s,qty){
     base=goods+ship.shipping,
     customs=(s.customs&&!ship.includesCustoms)?base*.12:0;
   return base+customs
+}
+function planningStrategicQuantities(s,requiredQty){
+  const required=Math.max(1,Math.ceil(num(requiredQty,1))),
+    minQty=Math.max(1,num(s?.minOrderQty,1)),
+    base=Math.max(required,minQty),
+    candidates=new Set([base]);
+
+  (s?.priceTiers||[]).forEach(t=>{
+    const q=Math.max(1,num(t.minQty,1));
+    if(q>=base)candidates.add(q)
+  });
+  (s?.shippingPoints||[]).forEach(p=>{
+    const q=Math.max(1,num(p.qty,1));
+    if(q>=base)candidates.add(q)
+  });
+
+  // Also inspect one unit below/above relevant breakpoints where legal.
+  [...candidates].forEach(q=>{
+    if(q-1>=base)candidates.add(q-1);
+    if(q+1>=base)candidates.add(q+1)
+  });
+
+  return [...candidates].sort((a,b)=>a-b)
+}
+function planningOptimizePieceOrder(kind,id,totalShort,s){
+  if(totalShort<=1e-9||!s)return{ordered:0,cost:0,moq:0,required:0,recommended:false};
+
+  const moq=Math.max(1,num(s.minOrderQty,1)),
+    required=Math.max(moq,Math.ceil(totalShort-1e-9)),
+    candidates=planningStrategicQuantities(s,required).map(q=>{
+      const cost=planningSupplierOrderCostForQty(s,q);
+      return{qty:q,cost,unit:q>0?cost/q:Infinity,shipping:planningShippingForQty(s,q)}
+    }),
+    requiredQuote=candidates.find(x=>x.qty===required) || {
+      qty:required,
+      cost:planningSupplierOrderCostForQty(s,required),
+      unit:planningSupplierOrderCostForQty(s,required)/required,
+      shipping:planningShippingForQty(s,required)
+    };
+
+  // Never choose a larger quantity if it actually costs MORE in total.
+  // But expose a "value option" when a breakpoint gives meaningfully cheaper
+  // landed unit cost for only a modest extra cash outlay.
+  const cheaperTotal=candidates
+    .filter(x=>x.qty>=required&&x.cost<requiredQuote.cost-0.005)
+    .sort((a,b)=>a.cost-b.cost||a.qty-b.qty)[0];
+
+  const valueOptions=candidates
+    .filter(x=>x.qty>required&&x.unit<requiredQuote.unit*0.90)
+    .map(x=>({...x,extraCash:x.cost-requiredQuote.cost,extraQty:x.qty-required}))
+    .filter(x=>x.extraCash>=0)
+    .sort((a,b)=>(a.extraCash/Math.max(1,a.extraQty))-(b.extraCash/Math.max(1,b.extraQty)))[0];
+
+  const chosen=cheaperTotal||requiredQuote;
+  return{
+    ordered:chosen.qty,
+    cost:chosen.cost,
+    moq,
+    required,
+    requiredCost:requiredQuote.cost,
+    requiredUnit:requiredQuote.unit,
+    recommended:!!cheaperTotal,
+    reason:cheaperTotal?'größere Menge ist sogar insgesamt günstiger':'Bedarf/MOQ',
+    shippingSource:chosen.shipping?.source||'',
+    valueOption:valueOptions||null
+  }
+}
+function planningPieceOrder(kind,id,totalShort,s){
+  return planningOptimizePieceOrder(kind,id,totalShort,s)
 }
 function planningSetComposition(kind,id,s){
   if(!s||s.priceType!=='set')return {};
@@ -378,7 +490,8 @@ function calcPurchasePlan(useStock=true){
         ordered=packs*pack;cost=packs*supplierOrderCost(s);moq=pack
       }else{
         const o=planningPieceOrder(g.kind,g.id,totalShort,s);
-        ordered=o.ordered;cost=o.cost;moq=o.moq
+        ordered=o.ordered;cost=o.cost;moq=o.moq;
+        g.orderOptimization=o
       }
     }
 
@@ -393,6 +506,7 @@ function calcPurchasePlan(useStock=true){
 
     const gp={kind:g.kind,id:g.id,priceType,requirements:details,totalNeed,totalAllocatedStock,totalShort,
       ordered,cost,moq,sets,composition,arrivals,excess:Math.max(0,ordered-totalShort),
+      orderOptimization:g.orderOptimization||null,
       missingSupplier:totalShort>1e-9&&!s,impossible};
     total+=cost;groupPlans.push(gp)
   });
@@ -427,6 +541,10 @@ function renderPurchaseCalc(){
       }
     }
     const arrival=Object.entries(g.arrivals||{}).filter(([,n])=>n>1e-9).map(([c,n])=>`${c||'frei/neutral'} ${Number.isInteger(n)?n:n.toFixed(2)}`).join(' · ');
+    const opt=g.orderOptimization,
+      valueHint=opt?.valueOption
+        ? `Alternative ${opt.valueOption.qty} Stk.: ${euro(opt.valueOption.cost)} gesamt · ${euro(opt.valueOption.unit)}/Stk. · nur ${euro(opt.valueOption.extraCash)} mehr für ${opt.valueOption.extraQty} zusätzliche Stück`
+        : '';
     return `<div class="purchase-item-group">
       <div class="purchase-item-group-head">
         <div><span class="idchip">${esc(g.id)}</span> <strong>${esc(warehouseItemName(g.kind,g.id))}</strong></div>
@@ -438,6 +556,9 @@ function renderPurchaseCalc(){
         <span>${x.color?warehouseColorChip(x.color):warehouseColorChip('')}</span><span>Bedarf ${x.need}</span><span>Lager ${x.stock}</span><span>${x.short?`fehlen ${x.short}`:'✓ gedeckt'}</span>
       </div>`).join('')}</div>
       ${arrival?`<div class="tiny" style="margin-top:5px"><strong>Bestellung liefert:</strong> ${esc(arrival)}</div>`:''}
+      ${opt?.shippingSource?`<div class="tiny"><strong>Versand:</strong> ${esc(opt.shippingSource)}</div>`:''}
+      ${opt?.recommended?`<div class="info" style="margin-top:5px"><strong>Optimiert:</strong> ${opt.required} Stück wären ${euro(opt.requiredCost)}, aber ${opt.ordered} Stück kosten insgesamt nur ${euro(opt.cost)}.</div>`:''}
+      ${valueHint?`<div class="tiny" style="margin-top:5px"><strong>Günstiger je Stück:</strong> ${valueHint}</div>`:''}
     </div>`
   }).join('');
 
@@ -619,7 +740,8 @@ function forecastPeriodLabel(){
 }
 function runRealReinvestmentForecast(){
   ensureSalesPlanning();
-  let stock=cloneForecastStock(),cash=actualRecoveredCash()-reconstructedActualPurchaseCapital(),initialCash=cash,events=[],breakEvenWeek=cash>=0?0:null;
+  let stock=cloneForecastStock(),cash=actualRecoveredCash()-reconstructedActualPurchaseCapital(),initialCash=cash,events=[],
+    breakEvenWeek=cash>=0?0:null,breakEvenSales=cash>=0?0:null,breakEvenCash=cash>=0?cash:null;
   const hasRealStock=(state.realWarehouse||[]).length>0;
   // If no actual purchase exists yet, use the current purchase-calculator plan as the virtual initial buy.
   if(!hasRealStock){
@@ -673,15 +795,19 @@ function runRealReinvestmentForecast(){
         cost=o.cost;let left=o.ordered;
         g.needs.forEach(r=>{const a=Math.min(r.short,left);if(a>0){arrivals[r.color||'']=(arrivals[r.color||'']||0)+a;left-=a}});
         if(left>1e-9)arrivals['']=(arrivals['']||0)+left;
-        text=`${g.id} · ${o.ordered} Stück nachbestellen (MOQ ${o.moq}; darüber stückgenau)`
+        text=`${g.id} · ${o.ordered} Stück nachbestellen (Bedarf ${Math.ceil(missing)} · MOQ ${o.moq}; Preis-/Versandpunkte geprüft${o.recommended?' · größere Menge insgesamt günstiger':''})`
       }
 
       Object.entries(arrivals).forEach(([color,qty])=>{if(qty>1e-9)forecastAddOrder(stock,{kind:g.kind,id:g.id,color},qty)});
       cash-=cost;totalReorders+=1;reorderCost+=cost;events.push({week,text,amount:-cost})
     });
-    if(breakEvenWeek===null&&cash>=0)breakEvenWeek=week
+    if(breakEvenWeek===null&&cash>=0){
+      breakEvenWeek=week;
+      breakEvenSales=totalForecastSales;
+      breakEvenCash=cash
+    }
   }
-  return{cash,initialCash,breakEvenWeek,events,totalForecastSales,totalReorders,reorderCost,stock}
+  return{cash,initialCash,breakEvenWeek,breakEvenSales,breakEvenCash,events,totalForecastSales,totalReorders,reorderCost,stock}
 }
 function renderRealReinvestmentForecast(){
   const el=$('#realReinvestmentForecast');if(!el)return;
@@ -694,7 +820,7 @@ function renderRealReinvestmentForecast(){
   el.innerHTML=`<div class="forecast-summary">
     <div class="production-kpi"><div class="label">Bisher echtes Einkaufskapital</div><div class="value">${euro(capital)}</div></div>
     <div class="production-kpi"><div class="label">Bisheriger Rückfluss aus Verkäufen</div><div class="value">${euro(recovered)}</div></div>
-    <div class="production-kpi"><div class="label">Voraussichtliche Amortisation</div><div class="value">${r.breakEvenWeek===null?'nicht innerhalb '+period:r.breakEvenWeek===0?'bereits erreicht':'in ca. '+r.breakEvenWeek+' Wo.'}</div></div>
+    <div class="production-kpi"><div class="label">Break-even-Punkt</div><div class="value">${r.breakEvenWeek===null?'nicht innerhalb '+period:r.breakEvenWeek===0?'bereits erreicht':`Woche ${r.breakEvenWeek}`}</div><div class="tiny">${r.breakEvenSales===null?'–':`${r.breakEvenSales.toFixed(1)} simulierte Verkäufe bis dahin`}</div></div>
     <div class="production-kpi"><div class="label">Simulierte Verkäufe (${period})</div><div class="value">${r.totalForecastSales.toFixed(1)}</div></div>
     <div class="production-kpi"><div class="label">Simulierte Nachbestellungen</div><div class="value">${euro(r.reorderCost)}</div><div class="tiny">${r.totalReorders} Bestellpakete</div></div>
   </div>
@@ -702,7 +828,7 @@ function renderRealReinvestmentForecast(){
     <strong>Voraussichtliches frei verfügbares Geld nach ${period}: ${euro(r.cash)}</strong><br>
     Das ist der simulierte Cash-Bestand nach Verkäufen und allen bis dahin nötigen Nachbestellungen. 
     ${netChange>=0?`Gegenüber dem Start der Prognose steigt der freie Cash-Bestand um ${euro(netChange)}.`:`Gegenüber dem Start der Prognose sinkt der freie Cash-Bestand um ${euro(Math.abs(netChange))}.`}
-    ${r.breakEvenWeek===null?' Das bisher investierte Einkaufskapital wäre in diesem Zeitraum noch nicht vollständig zurückverdient.':' Der Break-even berücksichtigt auch simulierte Nachbestellungen.'}
+    ${r.breakEvenWeek===null?' Das bisher investierte Einkaufskapital wäre in diesem Zeitraum noch nicht vollständig zurückverdient.':` Der Break-even ist der erste Zeitpunkt, an dem der kumulierte Cashflow nach Einkauf, Verkäufen und notwendigen Nachbestellungen wieder mindestens 0 € erreicht.`}
   </div>
   <details style="margin-top:10px"><summary>Prognostizierte Nachbestellereignisse (${r.events.length})</summary><div class="forecast-week-events">${r.events.map(e=>`<div class="forecast-event"><span>Woche ${e.week}</span><span>${esc(e.text)}</span><strong>${euro(e.amount)}</strong></div>`).join('')||'<div class="tiny">Keine Ereignisse.</div>'}</div></details>`
 }
