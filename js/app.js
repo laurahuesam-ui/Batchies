@@ -33,15 +33,48 @@ function overviewActualWarehouseUnits(){
     ? state.realWarehouse.reduce((a,x)=>a+num(x.qty),0)
     : 0
 }
-function overviewActualSalesStats(){
-  const sales=Array.isArray(state.salesHistory)?state.salesHistory:[];
-  const now=Date.now(),cut30=now-30*24*3600*1000;
+function overviewRealizedProfitForSale(s){
+  const b=state.batches.find(x=>x.key===s.batchKey);
+  if(!b)return{profit:num(s.revenue)-num(s.cogs),fees:0,labor:0,outbound:0,ads:0,risk:0,fixed:0};
+
+  const qty=Math.max(0,num(s.qty,1)),
+    price=Math.max(0,num(s.actualUnitPrice)),
+    // Use the batch's current non-material selling-cost rules, but replace
+    // calculated material with the ACTUAL warehouse COGS booked on this sale.
+    c=batchCalc({...b,salePrice:price});
+
   return{
-    count:sales.reduce((a,x)=>a+num(x.qty,1),0),
+    profit:num(s.revenue)-num(s.cogs)-c.fees*qty-c.laborCost*qty-c.outboundShipping*qty-c.adCost*qty-c.riskCost*qty-c.fixedAllocation*qty,
+    fees:c.fees*qty,
+    labor:c.laborCost*qty,
+    outbound:c.outboundShipping*qty,
+    ads:c.adCost*qty,
+    risk:c.riskCost*qty,
+    fixed:c.fixedAllocation*qty
+  }
+}
+function overviewActualSalesStats(){
+  const sales=Array.isArray(state.salesHistory)?state.salesHistory:[],
+    now=Date.now(),cut30=now-30*24*3600*1000;
+
+  let profit=0,profit30=0,fees=0,labor=0,outbound=0,ads=0,risk=0,fixed=0;
+  sales.forEach(x=>{
+    const p=overviewRealizedProfitForSale(x),
+      recent=new Date(x.soldAt).getTime()>=cut30;
+    profit+=p.profit;
+    if(recent)profit30+=p.profit;
+    fees+=p.fees;labor+=p.labor;outbound+=p.outbound;ads+=p.ads;risk+=p.risk;fixed+=p.fixed
+  });
+
+  const count=sales.reduce((a,x)=>a+num(x.qty,1),0);
+  return{
+    count,
     orders:sales.length,
     revenue:sales.reduce((a,x)=>a+num(x.revenue),0),
     cogs:sales.reduce((a,x)=>a+num(x.cogs),0),
     last30:sales.filter(x=>new Date(x.soldAt).getTime()>=cut30).reduce((a,x)=>a+num(x.qty,1),0),
+    profit,profit30,avgProfit:count>0?profit/count:0,
+    fees,labor,outbound,ads,risk,fixed,
     latest:sales.slice().sort((a,b)=>new Date(b.soldAt)-new Date(a.soldAt)).slice(0,5)
   }
 }
@@ -100,10 +133,17 @@ function renderOverviewLiveStats(){
     <div class="overview-live-kpi"><div class="label">Echter Lagerwert</div><div class="value">${euro(stockValue)}</div><div class="sub">${lots} Lagerpositionen · ${stockUnits.toLocaleString('de-DE')} Einheiten</div></div>
     <div class="overview-live-kpi"><div class="label">Verkäufe gesamt</div><div class="value">${sales.count.toLocaleString('de-DE')}</div><div class="sub">${sales.orders} Buchungen · letzte 30 Tage: ${sales.last30.toLocaleString('de-DE')}</div></div>
     <div class="overview-live-kpi"><div class="label">Echter Umsatz</div><div class="value">${euro(sales.revenue)}</div><div class="sub">aus gebuchten Verkäufen</div></div>
+    <div class="overview-live-kpi profit-kpi"><div class="label">Realisierter Gewinn</div><div class="value ${sales.profit>=0?'positive':'negative'}">${euro(sales.profit)}</div><div class="sub">nach echtem Waren-EK + Verkaufskosten</div></div>
+    <div class="overview-live-kpi"><div class="label">Gewinn letzte 30 Tage</div><div class="value ${sales.profit30>=0?'positive':'negative'}">${euro(sales.profit30)}</div><div class="sub">${sales.last30.toLocaleString('de-DE')} verkaufte Batches</div></div>
+    <div class="overview-live-kpi"><div class="label">Ø Gewinn / Batch</div><div class="value ${sales.avgProfit>=0?'positive':'negative'}">${euro(sales.avgProfit)}</div><div class="sub">realisierter Durchschnitt</div></div>
     <div class="overview-live-kpi"><div class="label">Entnommener Warenwert</div><div class="value">${euro(sales.cogs)}</div><div class="sub">tatsächliche Lager-EK der Verkäufe</div></div>
     <div class="overview-live-kpi"><div class="label">Umsatz − Warenwert</div><div class="value ${gross>=0?'positive':'negative'}">${euro(gross)}</div><div class="sub">vor Etsy, Arbeit, Versand & Fixkosten</div></div>
     <div class="overview-live-kpi"><div class="label">Direkt lieferbare Varianten</div><div class="value">${variants.sellable} / ${variants.total}</div><div class="sub">aus dem echten Lager</div></div>
   </div>
+  ${sales.count?`<div class="overview-profit-breakdown">
+    <span><strong>Gewinnrechnung echte Verkäufe:</strong></span>
+    <span>Umsatz ${euro(sales.revenue)}</span><span>− Waren-EK ${euro(sales.cogs)}</span><span>− Etsy ${euro(sales.fees)}</span><span>− Arbeit ${euro(sales.labor)}</span><span>− Kundenversand ${euro(sales.outbound)}</span><span>− Werbung ${euro(sales.ads)}</span><span>− Risiko ${euro(sales.risk)}</span><span>− Fixkosten ${euro(sales.fixed)}</span><span>= <strong class="${sales.profit>=0?'positive':'negative'}">${euro(sales.profit)}</strong></span>
+  </div>`:''}
   <div class="overview-live-grid">
     <div class="overview-live-section"><h3>Nachbestellen & Engpässe ${reorder.length?`(${reorder.length})`:''}</h3><div class="overview-alert-list">${reorderHtml}</div>${reorder.length>8?`<div class="tiny" style="margin-top:6px">+ ${reorder.length-8} weitere Positionen im Reiter Verkäufe.</div>`:''}</div>
     <div class="overview-live-section"><h3>Letzte echte Verkäufe</h3><div class="overview-sales-list">${salesHtml}</div></div>
