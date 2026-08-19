@@ -207,22 +207,39 @@ function planningStrategicQuantities(s,requiredQty){
   const required=Math.max(1,Math.ceil(num(requiredQty,1))),
     minQty=Math.max(1,num(s?.minOrderQty,1)),
     base=Math.max(required,minQty),
-    candidates=new Set([base]);
+    // "sensible" extra quantity: at most +50% or +10 pieces, whichever is larger.
+    // This prevents absurd jumps such as 37 -> 5000 only for a lower unit price.
+    sensibleCap=base+Math.max(10,Math.ceil(base*.50)),
+    candidates=new Set([base]),
+    shippingPoints=(s?.shippingPoints||[])
+      .map(p=>Math.max(1,num(p.qty,1)))
+      .filter(q=>q>=base)
+      .sort((a,b)=>a-b);
 
-  (s?.priceTiers||[]).forEach(t=>{
-    const q=Math.max(1,num(t.minQty,1));
-    if(q>=base)candidates.add(q)
-  });
-  (s?.shippingPoints||[]).forEach(p=>{
-    const q=Math.max(1,num(p.qty,1));
-    if(q>=base)candidates.add(q)
-  });
+  if(shippingPoints.length){
+    // Shipping measurements are the strongest/most realistic signal.
+    shippingPoints.filter(q=>q<=sensibleCap).slice(0,3).forEach(q=>candidates.add(q));
 
-  // Also inspect one unit below/above relevant breakpoints where legal.
-  [...candidates].forEach(q=>{
-    if(q-1>=base)candidates.add(q-1);
-    if(q+1>=base)candidates.add(q+1)
-  });
+    // If no measured point falls in the sensible window, keep only the nearest
+    // shipping point when it is not wildly larger (<=2x demand).
+    if(candidates.size===1){
+      const nearest=shippingPoints[0];
+      if(nearest<=base*2)candidates.add(nearest)
+    }
+
+    // Price tiers are secondary when shipping points exist: only include a tier
+    // if it lies inside the same sensible window.
+    (s?.priceTiers||[]).forEach(t=>{
+      const q=Math.max(1,num(t.minQty,1));
+      if(q>=base&&q<=sensibleCap)candidates.add(q)
+    })
+  }else{
+    // Without shipping points, nearby price tiers are the best available signal.
+    (s?.priceTiers||[]).forEach(t=>{
+      const q=Math.max(1,num(t.minQty,1));
+      if(q>=base&&q<=sensibleCap)candidates.add(q)
+    })
+  }
 
   return [...candidates].sort((a,b)=>a-b)
 }
@@ -246,38 +263,41 @@ function planningOptimizePieceOrder(kind,id,totalShort,s){
       const cost=planningSupplierOrderCostForQty(s,q);
       return{qty:q,cost,unit:q>0?cost/q:Infinity,shipping:planningShippingForQty(s,q)}
     }),
-    requiredQuote=candidates.find(x=>x.qty===required) || {
-      qty:required,
-      cost:planningSupplierOrderCostForQty(s,required),
+    requiredQuote=candidates.find(x=>x.qty===required)||{
+      qty:required,cost:planningSupplierOrderCostForQty(s,required),
       unit:planningSupplierOrderCostForQty(s,required)/required,
       shipping:planningShippingForQty(s,required)
     };
 
-  // Never choose a larger quantity if it actually costs MORE in total.
-  // But expose a "value option" when a breakpoint gives meaningfully cheaper
-  // landed unit cost for only a modest extra cash outlay.
-  const cheaperTotal=candidates
-    .filter(x=>x.qty>=required&&x.cost<requiredQuote.cost-0.005)
+  const alternatives=candidates.filter(x=>x.qty>required).map(x=>({
+    ...x,
+    extraQty:x.qty-required,
+    extraCash:x.cost-requiredQuote.cost,
+    unitSavingPct:requiredQuote.unit>0?(1-x.unit/requiredQuote.unit)*100:0
+  }));
+
+  // Business rule:
+  // 1) if more quantity is actually cheaper in TOTAL, take it.
+  // 2) otherwise only recommend an alternative if total cash is <=10% higher
+  //    AND landed unit cost improves by >=5%.
+  // This avoids capital-heavy "bargains".
+  const cheaperTotal=alternatives
+    .filter(x=>x.cost<requiredQuote.cost-0.005)
     .sort((a,b)=>a.cost-b.cost||a.qty-b.qty)[0];
 
-  const valueOptions=candidates
-    .filter(x=>x.qty>required&&x.unit<requiredQuote.unit*0.90)
-    .map(x=>({...x,extraCash:x.cost-requiredQuote.cost,extraQty:x.qty-required}))
-    .filter(x=>x.extraCash>=0)
-    .sort((a,b)=>(a.extraCash/Math.max(1,a.extraQty))-(b.extraCash/Math.max(1,b.extraQty)))[0];
+  const sensibleValue=alternatives
+    .filter(x=>x.extraCash>=0&&x.cost<=requiredQuote.cost*1.10&&x.unitSavingPct>=5)
+    .sort((a,b)=>b.unitSavingPct-a.unitSavingPct||a.extraCash-b.extraCash)[0];
 
   const chosen=cheaperTotal||requiredQuote;
   return{
-    ordered:chosen.qty,
-    cost:chosen.cost,
-    moq,
-    required,
-    requiredCost:requiredQuote.cost,
-    requiredUnit:requiredQuote.unit,
+    ordered:chosen.qty,cost:chosen.cost,moq,required,
+    requiredCost:requiredQuote.cost,requiredUnit:requiredQuote.unit,
     recommended:!!cheaperTotal,
-    reason:cheaperTotal?'größere Menge ist sogar insgesamt günstiger':'Bedarf/MOQ',
+    reason:cheaperTotal?'nahe Versandmenge ist insgesamt günstiger':'Bedarf/MOQ',
     shippingSource:chosen.shipping?.source||'',
-    valueOption:valueOptions||null
+    valueOption:sensibleValue||null,
+    candidates
   }
 }
 function planningPieceOrder(kind,id,totalShort,s){
@@ -389,7 +409,7 @@ function renderForecastVariantRates(){
   const el=$('#forecastVariantRates');if(!el)return;
   ensureSalesPlanning();
   const vars=allConfiguredVariants(),hasSales=hasAnyBookedSale(),actualTotal=totalActualSalesLast8Weeks(),total=hasSales?actualTotal:forecastScenarioTotal();
-  el.innerHTML=`<div class="info"><strong>${hasSales?'Prognose aus gebuchten Verkäufen':'Startprognose aktiv'}: ${total.toFixed(2).replace('.',',')} Verkäufe/Woche insgesamt</strong><br>${hasSales?'Es gibt mindestens einen tatsächlich gebuchten Verkauf. Deshalb verwendet die Prognose jetzt die Verkaufsrate der letzten 8 Wochen.':'Noch kein Verkauf wurde unter „Verkäufe“ gebucht. Deshalb bleibt dein ausgewähltes Start-Szenario aktiv; vorhandene Batches, Varianten oder Lagerbestände zählen NICHT als Verkäufe.'}</div>
+  el.innerHTML=`<div class="info"><strong>${hasSales?'Prognose aus gebuchten Verkäufen':'Startprognose aktiv'}: ${total.toFixed(2).replace('.',',')} Verkäufe/Woche insgesamt</strong><br>${hasSales?'Es gibt mindestens einen tatsächlich gebuchten Verkauf. Deshalb verwendet die Prognose jetzt die Verkaufsrate der letzten 8 Wochen.':'Noch kein Verkauf wurde unter „Verkäufe“ gebucht. Deshalb bleibt dein ausgewähltes Start-Szenario aktiv; vorhandene Batches, Varianten oder Lagerbestände zählen NICHT als Verkäufe. Die Gesamtzahl wird nicht pro Variante vervielfacht, sondern nur anhand der Gewichte verteilt.'}</div>
   ${vars.length?`<div class="forecast-rate-grid">${vars.map(x=>`<div class="forecast-rate-card">
     <div><strong>${esc(x.b.bid)} · ${esc(x.variant)}</strong></div>
     <div class="rowline"><span class="tiny">Gewichtung</span><input class="forecast-rate-input" data-key="${esc(x.key)}" type="number" min="0" step="0.1" value="${forecastVariantWeight(x.b.key,x.variant)}"></div>
@@ -409,7 +429,7 @@ function purchaseCalcAddAllVariants(){
   ensureSalesPlanning();
   const existing=new Set(state.salesPlanning.purchaseRows.map(r=>planningVariantKey(r.batchKey,r.variant)));
   let added=0;
-  forecastActiveVariants().forEach(x=>{
+  allConfiguredVariants().forEach(x=>{
     const k=planningVariantKey(x.b.key,x.variant);
     if(existing.has(k))return;
     state.salesPlanning.purchaseRows.push({key:crypto.randomUUID(),batchKey:x.b.key,variant:x.variant,qty:1});
@@ -550,7 +570,7 @@ function renderPurchaseCalc(){
     const arrival=Object.entries(g.arrivals||{}).filter(([,n])=>n>1e-9).map(([c,n])=>`${c||'frei/neutral'} ${Number.isInteger(n)?n:n.toFixed(2)}`).join(' · ');
     const opt=g.orderOptimization,
       valueHint=opt?.valueOption
-        ? `Alternative ${opt.valueOption.qty} Stk.: ${euro(opt.valueOption.cost)} gesamt · ${euro(opt.valueOption.unit)}/Stk. · nur ${euro(opt.valueOption.extraCash)} mehr für ${opt.valueOption.extraQty} zusätzliche Stück`
+        ? `Alternative ${opt.valueOption.qty} Stk.: ${euro(opt.valueOption.cost)} gesamt · ${euro(opt.valueOption.unit)}/Stk. · ${euro(opt.valueOption.extraCash)} mehr für ${opt.valueOption.extraQty} zusätzliche Stück · ${opt.valueOption.unitSavingPct.toFixed(1).replace('.',',')} % günstiger/Stk.`
         : '';
     return `<div class="purchase-item-group">
       <div class="purchase-item-group-head">
@@ -565,9 +585,9 @@ function renderPurchaseCalc(){
       ${arrival?`<div class="tiny" style="margin-top:5px"><strong>Bestellung liefert:</strong> ${esc(arrival)}</div>`:''}
       ${opt?.shippingSource?`<div class="tiny"><strong>Versand:</strong> ${esc(opt.shippingSource)}</div>`:''}
       ${opt?.recommended?`<div class="info" style="margin-top:5px"><strong>Optimiert:</strong> ${opt.required} Stück wären ${euro(opt.requiredCost)}, aber ${opt.ordered} Stück kosten insgesamt nur ${euro(opt.cost)}.</div>`:''}
-      ${valueHint?`<div class="tiny" style="margin-top:5px"><strong>Günstiger je Stück:</strong> ${valueHint}</div>`:''}
+      ${valueHint?`<div class="tiny" style="margin-top:5px"><strong>Sinnvolle Alternative:</strong> ${valueHint}</div>`:''}
       ${g.orderComparison?.length>1?`<details class="order-comparison" style="margin-top:6px" ${g.id==='PID-0003'?'open':''}>
-        <summary>Preis- & Versandpunkte vergleichen (${g.orderComparison.length})</summary>
+        <summary>Sinnvolle Bestellmengen vergleichen (${g.orderComparison.length})</summary>
         <div class="table-wrap"><table class="order-comparison-table"><thead><tr><th>Menge</th><th>Ware</th><th>Versand inkl. ggf. Zollabw.</th><th>Gesamt</th><th>€/Stk.</th></tr></thead><tbody>
         ${g.orderComparison.map(q=>`<tr class="${q.isRequired?'comparison-required':''}"><td>${q.qty}${q.isRequired?' · Bedarf/MOQ':''}</td><td>${euro(q.goods)}</td><td>${euro(q.shipping)}<div class="tiny">${esc(q.shippingSource)}</div></td><td><strong>${euro(q.cost)}</strong></td><td>${euro(q.unit)}</td></tr>`).join('')}
         </tbody></table></div>
@@ -783,76 +803,154 @@ function forecastPeriodLabel(){
 }
 function runRealReinvestmentForecast(){
   ensureSalesPlanning();
-  let stock=cloneForecastStock(),cash=actualRecoveredCash()-reconstructedActualPurchaseCapital(),initialCash=cash,events=[],
-    breakEvenWeek=cash>=0?0:null,breakEvenSales=cash>=0?0:null,breakEvenCash=cash>=0?cash:null;
+
+  let stock=cloneForecastStock(),
+    cash=actualRecoveredCash()-reconstructedActualPurchaseCapital(),
+    initialCash=cash,
+    events=[],
+    pendingOrders=[],
+    breakEvenWeek=cash>=0?0:null,
+    breakEvenSales=cash>=0?0:null,
+    breakEvenCash=cash>=0?cash:null;
+
   const hasRealStock=(state.realWarehouse||[]).length>0;
-  // If no actual purchase exists yet, use the current purchase-calculator plan as the virtual initial buy.
+
   if(!hasRealStock){
-    const plan=calcPurchasePlan(false);cash-=plan.total;
+    const plan=calcPurchasePlan(false);
+    cash-=plan.total;
     plan.groupPlans.forEach(g=>Object.entries(g.arrivals||{}).forEach(([color,qty])=>{
       if(qty>1e-9)forecastAddOrder(stock,{kind:g.kind,id:g.id,color},qty)
     }));
-    if(plan.total>0)events.push({week:0,text:'Virtueller Ersteinkauf · Stück-MOQ bzw. komplette Sets berücksichtigt',amount:-plan.total})
+    if(plan.total>0)events.push({
+      week:0,type:'purchase',
+      text:'Virtueller Ersteinkauf aus Einkaufsrechner',
+      amount:-plan.total
+    })
   }
-  const horizon=currentForecastWeeks(),reqWeekly=weeklyRequirements();
-  let totalForecastSales=0,totalReorders=0,reorderCost=0;
+
+  const horizon=currentForecastWeeks(),
+    reqWeekly=weeklyRequirements(),
+    leadWeeks=Math.max(0,Math.ceil(state.salesPlanning.leadWeeks)),
+    active=forecastActiveVariants();
+
+  let totalForecastSales=0,totalReorders=0,reorderCost=0,lostSales=0;
+
   for(let week=1;week<=horizon;week++){
-    // sales are expected values; consume fractional units for forecasting.
-    forecastActiveVariants().forEach(x=>{
-      const rate=planningRate(x.b.key,x.variant);if(rate<=0)return;
-      const requirements=saleRequirements(x.b,x.variant,1);
-      // Only forecast sales that can be supported; reorder checks below should normally keep it possible.
-      let feasible=rate;
-      requirements.forEach(r=>{const av=forecastStockAvailable(stock,r.kind,r.id,r.color);feasible=Math.min(feasible,av/Math.max(.001,r.need))});
-      feasible=Math.max(0,feasible);
-      requirements.forEach(r=>forecastConsume(stock,r,r.need*feasible));
-      cash+=estimatedSaleCashContribution(x.b,x.variant)*feasible;totalForecastSales+=feasible
+    // 1) Previously ordered goods arrive now.
+    const arriving=pendingOrders.filter(o=>o.arrivalWeek<=week);
+    arriving.forEach(o=>{
+      Object.entries(o.arrivals).forEach(([color,qty])=>{
+        if(qty>1e-9)forecastAddOrder(stock,{kind:o.kind,id:o.id,color},qty)
+      });
+      events.push({week,type:'arrival',text:`${o.id} Lieferung eingetroffen`,amount:0})
     });
-    // Reorder decision is color-aware, but the supplier order is ITEM-level:
-    // all colors of the same PID/VID are combined before MOQ/pack quantity is applied.
+    pendingOrders=pendingOrders.filter(o=>o.arrivalWeek>week);
+
+    // 2) Reorder BEFORE this week's sales if stock + already pending quantity
+    // falls to the dynamic lead-time/safety threshold.
     const reorderGroups=new Map();
+
     reqWeekly.forEach(r=>{
-      const current=forecastStockAvailable(stock,r.kind,r.id,r.color),point=reorderPointFor(r);
-      if(current>point+1e-9)return;
-      const coverageTarget=r.weekly*(state.salesPlanning.leadWeeks+state.salesPlanning.safetyWeeks),
-        target=Math.max(point+r.weekly,coverageTarget),
-        missing=Math.max(0,target-current);
+      const current=forecastStockAvailable(stock,r.kind,r.id,r.color),
+        pending=pendingOrders.reduce((sum,o)=>{
+          if(o.kind!==r.kind||o.id!==r.id)return sum;
+          return sum+num(o.arrivals[r.color||''])+(!r.color?0:num(o.arrivals['']))
+        },0),
+        effective=current+pending,
+        point=reorderPointFor(r);
+
+      if(effective>point+1e-9)return;
+
+      const target=r.weekly*(state.salesPlanning.leadWeeks+state.salesPlanning.safetyWeeks+1),
+        missing=Math.max(0,target-effective);
       if(missing<=1e-9)return;
+
       const k=r.kind+'|'+r.id;
       if(!reorderGroups.has(k))reorderGroups.set(k,{kind:r.kind,id:r.id,needs:[]});
       reorderGroups.get(k).needs.push({...r,short:missing})
     });
 
     reorderGroups.forEach(g=>{
+      // Never place another order for the same item while one is already pending.
+      if(pendingOrders.some(o=>o.kind===g.kind&&o.id===g.id))return;
+
       const s=planningPreferredSupplier(g.kind,g.id);if(!s)return;
       let cost=0,arrivals={},text='';
 
       if(s.priceType==='set'){
         const o=planningSetOrder(g.kind,g.id,g.needs,s);
         if(o.impossible||o.ordered<=0)return;
-        cost=o.cost;Object.entries(o.composition).forEach(([c,n])=>arrivals[c]=n*o.sets);
-        text=`${g.id} · ${o.sets} komplettes Set${o.sets===1?'':'s'} nachbestellen = ${o.ordered} Stück`
+        cost=o.cost;
+        Object.entries(o.composition).forEach(([c,n])=>arrivals[c]=n*o.sets);
+        text=`${g.id} · ${o.sets} komplettes Set${o.sets===1?'':'s'} bestellen = ${o.ordered} Stück`
       }else if(s.priceType==='consumable'){
-        const missing=g.needs.reduce((a,x)=>a+x.short,0),pack=supplierQtyBase(s),packs=Math.ceil(missing/pack-1e-9);
-        cost=packs*supplierOrderCost(s);arrivals['']=packs*pack;text=`${g.id} · ${packs*pack} als feste Packmenge nachbestellen`
+        const missing=g.needs.reduce((a,x)=>a+x.short,0),
+          pack=supplierQtyBase(s),
+          packs=Math.ceil(missing/pack-1e-9);
+        cost=packs*supplierOrderCost(s);
+        arrivals['']=packs*pack;
+        text=`${g.id} · ${packs*pack} als feste Packmenge bestellen`
       }else{
-        const missing=g.needs.reduce((a,x)=>a+x.short,0),o=planningPieceOrder(g.kind,g.id,missing,s);
-        cost=o.cost;let left=o.ordered;
-        g.needs.forEach(r=>{const a=Math.min(r.short,left);if(a>0){arrivals[r.color||'']=(arrivals[r.color||'']||0)+a;left-=a}});
+        const missing=g.needs.reduce((a,x)=>a+x.short,0),
+          o=planningPieceOrder(g.kind,g.id,missing,s);
+        cost=o.cost;
+        let left=o.ordered;
+        g.needs.forEach(r=>{
+          const a=Math.min(r.short,left);
+          if(a>0){arrivals[r.color||'']=(arrivals[r.color||'']||0)+a;left-=a}
+        });
         if(left>1e-9)arrivals['']=(arrivals['']||0)+left;
-        text=`${g.id} · ${o.ordered} Stück nachbestellen (Bedarf ${Math.ceil(missing)} · MOQ ${o.moq}; Preis-/Versandpunkte geprüft${o.recommended?' · größere Menge insgesamt günstiger':''})`
+        text=`${g.id} · ${o.ordered} Stück bestellen (Bedarf ${Math.ceil(missing)} · MOQ ${o.moq}${o.recommended?' · nahe Versandoption insgesamt günstiger':''})`
       }
 
-      Object.entries(arrivals).forEach(([color,qty])=>{if(qty>1e-9)forecastAddOrder(stock,{kind:g.kind,id:g.id,color},qty)});
-      cash-=cost;totalReorders+=1;reorderCost+=cost;events.push({week,text,amount:-cost})
+      cash-=cost;
+      reorderCost+=cost;
+      totalReorders+=1;
+
+      const arrivalWeek=week+leadWeeks;
+      if(leadWeeks===0){
+        Object.entries(arrivals).forEach(([color,qty])=>{
+          if(qty>1e-9)forecastAddOrder(stock,{kind:g.kind,id:g.id,color},qty)
+        })
+      }else{
+        pendingOrders.push({kind:g.kind,id:g.id,arrivals,arrivalWeek,cost})
+      }
+
+      events.push({
+        week,type:'reorder',
+        text:`${text}${leadWeeks?` · Ankunft ca. Woche ${arrivalWeek}`:''}`,
+        amount:-cost
+      })
     });
+
+    // 3) Expected sales for the week.
+    active.forEach(x=>{
+      const rate=planningRate(x.b.key,x.variant);if(rate<=0)return;
+      const requirements=saleRequirements(x.b,x.variant,1);
+      let feasible=rate;
+      requirements.forEach(r=>{
+        const av=forecastStockAvailable(stock,r.kind,r.id,r.color);
+        feasible=Math.min(feasible,av/Math.max(.001,r.need))
+      });
+      feasible=Math.max(0,feasible);
+      lostSales+=Math.max(0,rate-feasible);
+      requirements.forEach(r=>forecastConsume(stock,r,r.need*feasible));
+      cash+=estimatedSaleCashContribution(x.b,x.variant)*feasible;
+      totalForecastSales+=feasible
+    });
+
     if(breakEvenWeek===null&&cash>=0){
       breakEvenWeek=week;
       breakEvenSales=totalForecastSales;
       breakEvenCash=cash
     }
   }
-  return{cash,initialCash,breakEvenWeek,breakEvenSales,breakEvenCash,events,totalForecastSales,totalReorders,reorderCost,stock}
+
+  return{
+    cash,initialCash,breakEvenWeek,breakEvenSales,breakEvenCash,
+    events,totalForecastSales,totalReorders,reorderCost,stock,lostSales,
+    pendingOrders,weeklyTarget:hasAnyBookedSale()?totalActualSalesLast8Weeks():forecastScenarioTotal()
+  }
 }
 function renderRealReinvestmentForecast(){
   const el=$('#realReinvestmentForecast');if(!el)return;
@@ -877,7 +975,7 @@ function renderRealReinvestmentForecast(){
     <div class="production-kpi"><div class="label">Bisher echtes Einkaufskapital</div><div class="value">${euro(capital)}</div></div>
     <div class="production-kpi"><div class="label">Bisheriger Rückfluss aus Verkäufen</div><div class="value">${euro(recovered)}</div></div>
     <div class="production-kpi"><div class="label">Break-even-Punkt</div><div class="value">${r.breakEvenWeek===null?'nicht innerhalb '+period:r.breakEvenWeek===0?'bereits erreicht':`Woche ${r.breakEvenWeek}`}</div><div class="tiny">${r.breakEvenSales===null?'–':`${r.breakEvenSales.toFixed(1)} simulierte Verkäufe bis dahin`}</div></div>
-    <div class="production-kpi"><div class="label">Simulierte Verkäufe (${period})</div><div class="value">${r.totalForecastSales.toFixed(1)}</div></div>
+    <div class="production-kpi"><div class="label">Simulierte Verkäufe (${period})</div><div class="value">${r.totalForecastSales.toFixed(1)}</div><div class="tiny">${r.weeklyTarget.toFixed(2).replace('.',',')} erwartete Verkäufe/Woche insgesamt${r.lostSales>0?` · ${r.lostSales.toFixed(1)} potenziell nicht lieferbar`:''}</div></div>
     <div class="production-kpi"><div class="label">Simulierte Nachbestellungen</div><div class="value">${euro(r.reorderCost)}</div><div class="tiny">${r.totalReorders} Bestellpakete</div></div>
   </div>
   <div class="info">
@@ -886,7 +984,7 @@ function renderRealReinvestmentForecast(){
     ${netChange>=0?`Gegenüber dem Start der Prognose steigt der freie Cash-Bestand um ${euro(netChange)}.`:`Gegenüber dem Start der Prognose sinkt der freie Cash-Bestand um ${euro(Math.abs(netChange))}.`}
     ${r.breakEvenWeek===null?' Das bisher investierte Einkaufskapital wäre in diesem Zeitraum noch nicht vollständig zurückverdient.':` Der Break-even ist der erste Zeitpunkt, an dem der kumulierte Cashflow nach Einkauf, Verkäufen und notwendigen Nachbestellungen wieder mindestens 0 € erreicht.`}
   </div>
-  <details style="margin-top:10px"><summary>Prognostizierte Nachbestellereignisse (${r.events.length})</summary><div class="forecast-week-events">${r.events.map(e=>`<div class="forecast-event"><span>Woche ${e.week}</span><span>${esc(e.text)}</span><strong>${euro(e.amount)}</strong></div>`).join('')||'<div class="tiny">Keine Ereignisse.</div>'}</div></details>`
+  <details style="margin-top:10px"><summary>Bestell- & Lieferplan (${r.events.length})</summary><div class="forecast-week-events">${r.events.map(e=>`<div class="forecast-event"><span>Woche ${e.week}</span><span>${esc(e.text)}</span><strong>${euro(e.amount)}</strong></div>`).join('')||'<div class="tiny">Keine Ereignisse.</div>'}</div></details>`
 }
 function renderForecastAll(){
   ensureSalesPlanning();
