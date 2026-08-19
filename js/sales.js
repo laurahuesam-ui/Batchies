@@ -226,6 +226,17 @@ function planningStrategicQuantities(s,requiredQty){
 
   return [...candidates].sort((a,b)=>a-b)
 }
+function planningOrderComparison(s,requiredQty){
+  if(!s||s.priceType==='set'||s.priceType==='consumable')return [];
+  const required=Math.max(Math.max(1,num(s.minOrderQty,1)),Math.ceil(num(requiredQty,0)));
+  return planningStrategicQuantities(s,required).map(q=>{
+    const shipping=planningShippingForQty(s,q),
+      cost=planningSupplierOrderCostForQty(s,q),
+      unit=cost/q,
+      goods=supplierTierUnitPrice(s,q)*q;
+    return{qty:q,goods,shipping:shipping.shipping,shippingSource:shipping.source||'',cost,unit,isRequired:q===required}
+  }).sort((a,b)=>a.qty-b.qty)
+}
 function planningOptimizePieceOrder(kind,id,totalShort,s){
   if(totalShort<=1e-9||!s)return{ordered:0,cost:0,moq:0,required:0,recommended:false};
 
@@ -286,12 +297,6 @@ function planningSetComposition(kind,id,s){
   const each=setQty/colors.length,out={};
   colors.forEach(c=>out[c]=each);
   return out
-}
-function planningPieceOrder(kind,id,totalShort,s){
-  if(totalShort<=1e-9||!s)return{ordered:0,cost:0,moq:0};
-  const moq=Math.max(1,num(s.minOrderQty,1)),
-    ordered=Math.max(moq,Math.ceil(totalShort-1e-9));
-  return{ordered,cost:planningSupplierOrderCostForQty(s,ordered),moq}
 }
 function planningSetOrder(kind,id,requirements,s){
   const composition=planningSetComposition(kind,id,s),
@@ -404,7 +409,7 @@ function purchaseCalcAddAllVariants(){
   ensureSalesPlanning();
   const existing=new Set(state.salesPlanning.purchaseRows.map(r=>planningVariantKey(r.batchKey,r.variant)));
   let added=0;
-  allConfiguredVariants().forEach(x=>{
+  forecastActiveVariants().forEach(x=>{
     const k=planningVariantKey(x.b.key,x.variant);
     if(existing.has(k))return;
     state.salesPlanning.purchaseRows.push({key:crypto.randomUUID(),batchKey:x.b.key,variant:x.variant,qty:1});
@@ -491,7 +496,8 @@ function calcPurchasePlan(useStock=true){
       }else{
         const o=planningPieceOrder(g.kind,g.id,totalShort,s);
         ordered=o.ordered;cost=o.cost;moq=o.moq;
-        g.orderOptimization=o
+        g.orderOptimization=o;
+        g.orderComparison=planningOrderComparison(s,totalShort)
       }
     }
 
@@ -507,6 +513,7 @@ function calcPurchasePlan(useStock=true){
     const gp={kind:g.kind,id:g.id,priceType,requirements:details,totalNeed,totalAllocatedStock,totalShort,
       ordered,cost,moq,sets,composition,arrivals,excess:Math.max(0,ordered-totalShort),
       orderOptimization:g.orderOptimization||null,
+      orderComparison:g.orderComparison||[],
       missingSupplier:totalShort>1e-9&&!s,impossible};
     total+=cost;groupPlans.push(gp)
   });
@@ -559,6 +566,12 @@ function renderPurchaseCalc(){
       ${opt?.shippingSource?`<div class="tiny"><strong>Versand:</strong> ${esc(opt.shippingSource)}</div>`:''}
       ${opt?.recommended?`<div class="info" style="margin-top:5px"><strong>Optimiert:</strong> ${opt.required} Stück wären ${euro(opt.requiredCost)}, aber ${opt.ordered} Stück kosten insgesamt nur ${euro(opt.cost)}.</div>`:''}
       ${valueHint?`<div class="tiny" style="margin-top:5px"><strong>Günstiger je Stück:</strong> ${valueHint}</div>`:''}
+      ${g.orderComparison?.length>1?`<details class="order-comparison" style="margin-top:6px" ${g.id==='PID-0003'?'open':''}>
+        <summary>Preis- & Versandpunkte vergleichen (${g.orderComparison.length})</summary>
+        <div class="table-wrap"><table class="order-comparison-table"><thead><tr><th>Menge</th><th>Ware</th><th>Versand inkl. ggf. Zollabw.</th><th>Gesamt</th><th>€/Stk.</th></tr></thead><tbody>
+        ${g.orderComparison.map(q=>`<tr class="${q.isRequired?'comparison-required':''}"><td>${q.qty}${q.isRequired?' · Bedarf/MOQ':''}</td><td>${euro(q.goods)}</td><td>${euro(q.shipping)}<div class="tiny">${esc(q.shippingSource)}</div></td><td><strong>${euro(q.cost)}</strong></td><td>${euro(q.unit)}</td></tr>`).join('')}
+        </tbody></table></div>
+      </details>`:''}
     </div>`
   }).join('');
 
@@ -568,6 +581,36 @@ function renderPurchaseCalc(){
     <div class="production-kpi"><div class="label">Komplett aus Lager</div><div class="value">${covered}</div></div>
     <div class="production-kpi"><div class="label">Gesamtbedarf</div><div class="value">${totalNeeded.toLocaleString('de-DE')}</div></div>
   </div><div class="purchase-group-list">${groups||'<div class="empty">Keine Auswahl</div>'}</div>`
+}
+function forecastActiveVariants(){
+  ensureSalesPlanning();
+  const hasRealStock=(state.realWarehouse||[]).length>0;
+
+  if(!hasRealStock&&state.salesPlanning.purchaseRows.length){
+    const seen=new Set(),out=[];
+    state.salesPlanning.purchaseRows.forEach(r=>{
+      const k=planningVariantKey(r.batchKey,r.variant);
+      if(seen.has(k))return;
+      const b=state.batches.find(x=>x.key===r.batchKey);
+      if(b&&selectedBatchSaleVariant(b,r.variant)){
+        seen.add(k);out.push({b,variant:r.variant,key:k})
+      }
+    });
+    return out
+  }
+
+  if(hasRealStock){
+    // Once real stock exists, use variants that can currently be produced OR
+    // have a positive configured/actual demand rate. This avoids unrelated
+    // dormant variants forcing immediate purchases.
+    return allConfiguredVariants().filter(x=>{
+      const cap=stockCapacityForVariant(x.b,x.variant);
+      const actual=actualWeeklyRate(x.b.key,x.variant);
+      return cap>0||actual>0
+    })
+  }
+
+  return allConfiguredVariants()
 }
 function weeklyRequirements(){
   const map=new Map();
@@ -755,7 +798,7 @@ function runRealReinvestmentForecast(){
   let totalForecastSales=0,totalReorders=0,reorderCost=0;
   for(let week=1;week<=horizon;week++){
     // sales are expected values; consume fractional units for forecasting.
-    allConfiguredVariants().forEach(x=>{
+    forecastActiveVariants().forEach(x=>{
       const rate=planningRate(x.b.key,x.variant);if(rate<=0)return;
       const requirements=saleRequirements(x.b,x.variant,1);
       // Only forecast sales that can be supported; reorder checks below should normally keep it possible.
@@ -771,7 +814,9 @@ function runRealReinvestmentForecast(){
     reqWeekly.forEach(r=>{
       const current=forecastStockAvailable(stock,r.kind,r.id,r.color),point=reorderPointFor(r);
       if(current>point+1e-9)return;
-      const target=point+r.weekly*Math.max(1,state.salesPlanning.leadWeeks),missing=Math.max(0,target-current);
+      const coverageTarget=r.weekly*(state.salesPlanning.leadWeeks+state.salesPlanning.safetyWeeks),
+        target=Math.max(point+r.weekly,coverageTarget),
+        missing=Math.max(0,target-current);
       if(missing<=1e-9)return;
       const k=r.kind+'|'+r.id;
       if(!reorderGroups.has(k))reorderGroups.set(k,{kind:r.kind,id:r.id,needs:[]});
@@ -817,7 +862,18 @@ function renderRealReinvestmentForecast(){
     period=forecastPeriodLabel(),
     netChange=r.cash-r.initialCash;
 
-  el.innerHTML=`<div class="forecast-summary">
+  const beReached=r.breakEvenWeek!==null,
+    beText=beReached
+      ? (r.breakEvenWeek===0?'Bereits erreicht':`Woche ${r.breakEvenWeek}`)
+      : `Nicht innerhalb ${period}`,
+    beSales=beReached&&r.breakEvenSales!==null?r.breakEvenSales.toFixed(1):'–';
+
+  el.innerHTML=`<div class="break-even-panel ${beReached?'reached':'pending'}">
+    <div><div class="tiny">BREAK-EVEN-POINT</div><div class="break-even-main">${beText}</div></div>
+    <div><div class="tiny">Verkäufe bis Break-even</div><strong>${beSales}</strong></div>
+    <div><div class="tiny">Bedeutung</div><span>Erster Zeitpunkt, an dem Verkäufe nach Ersteinkauf und allen nötigen Nachbestellungen das investierte Geld vollständig zurückverdient haben.</span></div>
+  </div>
+  <div class="forecast-summary">
     <div class="production-kpi"><div class="label">Bisher echtes Einkaufskapital</div><div class="value">${euro(capital)}</div></div>
     <div class="production-kpi"><div class="label">Bisheriger Rückfluss aus Verkäufen</div><div class="value">${euro(recovered)}</div></div>
     <div class="production-kpi"><div class="label">Break-even-Punkt</div><div class="value">${r.breakEvenWeek===null?'nicht innerhalb '+period:r.breakEvenWeek===0?'bereits erreicht':`Woche ${r.breakEvenWeek}`}</div><div class="tiny">${r.breakEvenSales===null?'–':`${r.breakEvenSales.toFixed(1)} simulierte Verkäufe bis dahin`}</div></div>
@@ -846,7 +902,9 @@ function renderForecastAll(){
   if(startSales)startSales.value=state.salesPlanning.startWeeklySales;
   if(startWrap)startWrap.classList.toggle('hidden',(state.salesPlanning.forecastScenario||'realistic')!=='custom');
   if(wrap)wrap.classList.toggle('hidden',(state.salesPlanning.horizonPreset||'52w')!=='custom');
-  renderForecastVariantRates();renderForecastReorderTable();renderRealReinvestmentForecast()
+  try{renderForecastVariantRates()}catch(err){console.error('Forecast Varianten:',err)}
+  try{renderForecastReorderTable()}catch(err){console.error('Nachbestellpunkte:',err)}
+  try{renderRealReinvestmentForecast()}catch(err){console.error('Break-even/Reinvestition:',err);const el=$('#realReinvestmentForecast');if(el)el.innerHTML='<div class="hint">Prognose konnte nicht berechnet werden. Details stehen in der Browser-Konsole.</div>'}
 }
 function bindSalesPlanningUi(){
   ensureSalesPlanning();
