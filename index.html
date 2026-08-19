@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#24513b">
 <meta name="description" content="Batchies – Produkt- und Batchentwicklung, Lieferantenvergleich und Etsy-Preiskalkulation.">
-<link rel="manifest" href="manifest.webmanifest?v=3.5.4">
+<link rel="manifest" href="manifest.webmanifest?v=3.5.5">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <title>Batchies – Produktentwicklung</title>
@@ -207,12 +207,15 @@
 .overview-profit-breakdown{display:flex;gap:7px 14px;align-items:center;flex-wrap:wrap;border:1px solid var(--line);border-radius:11px;padding:8px 10px;margin:-2px 0 12px;font-size:10px;background:#fff}
 @media(max-width:1100px){.overview-live-kpis{grid-template-columns:repeat(3,minmax(0,1fr))!important}}
 @media(max-width:800px){.overview-live-kpis{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
+
+#filterProductBatch{max-width:260px}
+@media(max-width:900px){#filterProductBatch{max-width:100%}}
 </style>
 </head>
 <body>
 <div class="app">
 <header class="topbar">
-  <div class="brand"><div class="logo">B</div><div><h1>Batchies</h1><div class="subtitle">Produktentwicklung & Stammdaten · v3.5.4</div></div></div>
+  <div class="brand"><div class="logo">B</div><div><h1>Batchies</h1><div class="subtitle">Produktentwicklung & Stammdaten · v3.5.5</div></div></div>
   <div class="actions"><button class="btn" id="exportBackupBtn">Backup</button><button class="btn" id="importBackupBtn">Import</button><button class="btn primary" id="addProductBtn">+ Produkt</button><button class="btn primary" id="addBatchBtn">+ Batch</button><input type="file" id="backupFile" accept="application/json" hidden></div>
 </header>
 <nav class="tabs"><button class="tab active" data-tab="overview">Übersicht</button><button class="tab" data-tab="products">Produkte</button><button class="tab" data-tab="packaging">Verpackung</button><button class="tab" data-tab="batches">Batches</button><button class="tab" data-tab="warehouse">Lager</button><button class="tab" data-tab="sales">Verkäufe</button><button class="tab" data-tab="fees">Gebühren & Kalkulation</button><button class="tab" data-tab="investments">Investitionen</button><button class="tab" data-tab="simulation">Einkaufs-Simulation</button><button class="tab" data-tab="data">Stammdaten & CSV</button></nav>
@@ -238,7 +241,7 @@
     <div id="overviewBatches"></div>
   </div>
 </div></section>
-<section id="tab-products" class="tabpage hidden"><div class="card"><div class="toolbar"><div><h2 class="section-title" style="margin-bottom:2px">Produkt-Stammdaten</h2><div class="muted">PID, Lieferanten vergleichen, Produktbild und Kalkulation.</div></div><div class="inline"><select id="filterProductStatus" title="Nach Status filtern"><option value="">Alle Status</option><option value="idea">Idee</option><option value="research">Recherche</option><option value="prototype">Prototyp</option><option value="ready">Verkaufsbereit</option></select><select id="filterProductColor" class="color-filter" title="Nach Farbe filtern"></select><input class="search" id="searchProducts" placeholder="Produkte suchen …"></div></div><div id="productsTable"></div></div></section>
+<section id="tab-products" class="tabpage hidden"><div class="card"><div class="toolbar"><div><h2 class="section-title" style="margin-bottom:2px">Produkt-Stammdaten</h2><div class="muted">PID, Lieferanten vergleichen, Produktbild und Kalkulation.</div></div><div class="inline"><select id="filterProductStatus" title="Nach Status filtern"><option value="">Alle Status</option><option value="idea">Idee</option><option value="research">Recherche</option><option value="prototype">Prototyp</option><option value="ready">Verkaufsbereit</option></select><select id="filterProductBatch" title="Nur Produkte aus einem bestimmten Batch anzeigen"><option value="">Alle Batches</option></select><select id="filterProductColor" class="color-filter" title="Nach Farbe filtern"></select><input class="search" id="searchProducts" placeholder="Produkte suchen …"></div></div><div id="productsTable"></div></div></section>
 
 <section id="tab-packaging" class="tabpage hidden"><div class="grid">
   <div class="card span12">
@@ -465,20 +468,20 @@
   <div class="modal-foot"><button type="button" class="btn danger hidden" id="deletePackagingBtn">Verpackungsmaterial löschen</button><span style="flex:1"></span><button type="button" class="btn cancel-packaging-dialog">Abbrechen</button><button type="submit" class="btn primary" value="save" id="savePackagingBtn">Speichern</button></div>
 </form></dialog>
 
-<script src="js/category-data.js?v=3.5.4"></script>
-<script src="js/recovery-data.js?v=3.5.4"></script>
-<script src="js/config.js?v=3.5.4"></script>
-<script src="js/colors.js?v=3.5.4"></script>
-<script src="js/core.js?v=3.5.4"></script>
-<script src="js/categories.js?v=3.5.4"></script>
-<script src="js/pricing.js?v=3.5.4"></script>
-<script src="js/products.js?v=3.5.4"></script>
-<script src="js/batches.js?v=3.5.4"></script>
-<script src="js/batch-suggestions.js?v=3.5.4"></script>
-<script src="js/exports.js?v=3.5.4"></script>
-<script src="js/simulation.js?v=3.5.4"></script>
-<script src="js/packaging.js?v=3.5.4"></script>
-<script src="js/warehouse.js?v=3.5.4"></script>
-<script src="js/sales.js?v=3.5.4"></script>
-<script src="js/app.js?v=3.5.4"></script>
+<script src="js/category-data.js?v=3.5.5"></script>
+<script src="js/recovery-data.js?v=3.5.5"></script>
+<script src="js/config.js?v=3.5.5"></script>
+<script src="js/colors.js?v=3.5.5"></script>
+<script src="js/core.js?v=3.5.5"></script>
+<script src="js/categories.js?v=3.5.5"></script>
+<script src="js/pricing.js?v=3.5.5"></script>
+<script src="js/products.js?v=3.5.5"></script>
+<script src="js/batches.js?v=3.5.5"></script>
+<script src="js/batch-suggestions.js?v=3.5.5"></script>
+<script src="js/exports.js?v=3.5.5"></script>
+<script src="js/simulation.js?v=3.5.5"></script>
+<script src="js/packaging.js?v=3.5.5"></script>
+<script src="js/warehouse.js?v=3.5.5"></script>
+<script src="js/sales.js?v=3.5.5"></script>
+<script src="js/app.js?v=3.5.5"></script>
 </body></html>
