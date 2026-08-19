@@ -1,4 +1,4 @@
-const CACHE='batchies-v3.5.0';
+const CACHE='batchies-v3.5.1';
 const ASSETS=[
   './','./index.html','./manifest.webmanifest','./icon-192.png','./icon-512.png',
   './data/categories.json','./js/category-data.js','./js/recovery-data.js',

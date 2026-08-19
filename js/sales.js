@@ -604,9 +604,12 @@ function renderPurchaseCalc(){
 }
 function forecastActiveVariants(){
   ensureSalesPlanning();
-  const hasRealStock=(state.realWarehouse||[]).length>0;
 
-  if(!hasRealStock&&state.salesPlanning.purchaseRows.length){
+  // The purchase calculator is the explicit assortment selection for the forecast.
+  // Once a variant is selected there, it remains part of expected demand even if
+  // its current stock reaches zero. Otherwise shortages would disappear instead
+  // of being reported/reordered.
+  if(state.salesPlanning.purchaseRows.length){
     const seen=new Set(),out=[];
     state.salesPlanning.purchaseRows.forEach(r=>{
       const k=planningVariantKey(r.batchKey,r.variant);
@@ -616,25 +619,14 @@ function forecastActiveVariants(){
         seen.add(k);out.push({b,variant:r.variant,key:k})
       }
     });
-    return out
-  }
-
-  if(hasRealStock){
-    // Once real stock exists, use variants that can currently be produced OR
-    // have a positive configured/actual demand rate. This avoids unrelated
-    // dormant variants forcing immediate purchases.
-    return allConfiguredVariants().filter(x=>{
-      const cap=stockCapacityForVariant(x.b,x.variant);
-      const actual=actualWeeklyRate(x.b.key,x.variant);
-      return cap>0||actual>0
-    })
+    if(out.length)return out
   }
 
   return allConfiguredVariants()
 }
 function weeklyRequirements(){
   const map=new Map();
-  allConfiguredVariants().forEach(x=>{
+  forecastActiveVariants().forEach(x=>{
     const rate=planningRate(x.b.key,x.variant);if(rate<=0)return;
     saleRequirements(x.b,x.variant,1).forEach(req=>{
       const k=planningStockKey(req.kind,req.id,req.color);
@@ -801,6 +793,10 @@ function forecastPeriodLabel(){
   if(p==='52w')return '52 Wochen';
   return currentForecastWeeks()+' Wochen'
 }
+function forecastShortageKey(r){return planningStockKey(r.kind,r.id,r.color)}
+function forecastShortageLabel(r){
+  return `${r.id} · ${warehouseItemName(r.kind,r.id)}${r.color?' · '+r.color:''}`
+}
 function runRealReinvestmentForecast(){
   ensureSalesPlanning();
 
@@ -833,7 +829,8 @@ function runRealReinvestmentForecast(){
     leadWeeks=Math.max(0,Math.ceil(state.salesPlanning.leadWeeks)),
     active=forecastActiveVariants();
 
-  let totalForecastSales=0,totalReorders=0,reorderCost=0,lostSales=0;
+  let totalForecastSales=0,totalReorders=0,reorderCost=0,lostSales=0,
+    expectedDemand=0,shortageMap=new Map();
 
   for(let week=1;week<=horizon;week++){
     // 1) Previously ordered goods arrive now.
@@ -854,7 +851,7 @@ function runRealReinvestmentForecast(){
       const current=forecastStockAvailable(stock,r.kind,r.id,r.color),
         pending=pendingOrders.reduce((sum,o)=>{
           if(o.kind!==r.kind||o.id!==r.id)return sum;
-          return sum+num(o.arrivals[r.color||''])+(!r.color?0:num(o.arrivals['']))
+          return sum+num(o.arrivals[r.color||''])+(r.color?num(o.arrivals['']):0)
         },0),
         effective=current+pending,
         point=reorderPointFor(r);
@@ -926,14 +923,40 @@ function runRealReinvestmentForecast(){
     // 3) Expected sales for the week.
     active.forEach(x=>{
       const rate=planningRate(x.b.key,x.variant);if(rate<=0)return;
+      expectedDemand+=rate;
       const requirements=saleRequirements(x.b,x.variant,1);
       let feasible=rate;
+
       requirements.forEach(r=>{
         const av=forecastStockAvailable(stock,r.kind,r.id,r.color);
         feasible=Math.min(feasible,av/Math.max(.001,r.need))
       });
       feasible=Math.max(0,feasible);
-      lostSales+=Math.max(0,rate-feasible);
+
+      const missed=Math.max(0,rate-feasible);
+      lostSales+=missed;
+
+      if(missed>1e-9){
+        requirements.forEach(r=>{
+          const available=forecastStockAvailable(stock,r.kind,r.id,r.color),
+            neededForFull=r.need*rate,
+            missingUnits=Math.max(0,neededForFull-available);
+          if(missingUnits<=1e-9)return;
+          const k=forecastShortageKey(r),
+            pendingForItem=pendingOrders.filter(o=>o.kind===r.kind&&o.id===r.id),
+            nextArrival=pendingForItem.length?Math.min(...pendingForItem.map(o=>o.arrivalWeek)):null,
+            entry=shortageMap.get(k)||{
+              kind:r.kind,id:r.id,color:r.color||'',lostSales:0,missingUnits:0,
+              firstWeek:week,lastWeek:week,nextArrival:null
+            };
+          entry.lostSales+=missed;
+          entry.missingUnits+=missingUnits;
+          entry.lastWeek=week;
+          if(nextArrival!==null)entry.nextArrival=entry.nextArrival===null?nextArrival:Math.min(entry.nextArrival,nextArrival);
+          shortageMap.set(k,entry)
+        })
+      }
+
       requirements.forEach(r=>forecastConsume(stock,r,r.need*feasible));
       cash+=estimatedSaleCashContribution(x.b,x.variant)*feasible;
       totalForecastSales+=feasible
@@ -949,7 +972,9 @@ function runRealReinvestmentForecast(){
   return{
     cash,initialCash,breakEvenWeek,breakEvenSales,breakEvenCash,
     events,totalForecastSales,totalReorders,reorderCost,stock,lostSales,
-    pendingOrders,weeklyTarget:hasAnyBookedSale()?totalActualSalesLast8Weeks():forecastScenarioTotal()
+    pendingOrders,weeklyTarget:hasAnyBookedSale()?totalActualSalesLast8Weeks():forecastScenarioTotal(),
+    expectedDemand,
+    shortages:[...shortageMap.values()].sort((a,b)=>b.lostSales-a.lostSales)
   }
 }
 function renderRealReinvestmentForecast(){
@@ -975,7 +1000,9 @@ function renderRealReinvestmentForecast(){
     <div class="production-kpi"><div class="label">Bisher echtes Einkaufskapital</div><div class="value">${euro(capital)}</div></div>
     <div class="production-kpi"><div class="label">Bisheriger Rückfluss aus Verkäufen</div><div class="value">${euro(recovered)}</div></div>
     <div class="production-kpi"><div class="label">Break-even-Punkt</div><div class="value">${r.breakEvenWeek===null?'nicht innerhalb '+period:r.breakEvenWeek===0?'bereits erreicht':`Woche ${r.breakEvenWeek}`}</div><div class="tiny">${r.breakEvenSales===null?'–':`${r.breakEvenSales.toFixed(1)} simulierte Verkäufe bis dahin`}</div></div>
-    <div class="production-kpi"><div class="label">Simulierte Verkäufe (${period})</div><div class="value">${r.totalForecastSales.toFixed(1)}</div><div class="tiny">${r.weeklyTarget.toFixed(2).replace('.',',')} erwartete Verkäufe/Woche insgesamt${r.lostSales>0?` · ${r.lostSales.toFixed(1)} potenziell nicht lieferbar`:''}</div></div>
+    <div class="production-kpi"><div class="label">Erwartete Nachfrage (${period})</div><div class="value">${r.expectedDemand.toFixed(1)}</div><div class="tiny">${r.weeklyTarget.toFixed(2).replace('.',',')} Verkäufe/Woche insgesamt</div></div>
+    <div class="production-kpi"><div class="label">Voraussichtlich lieferbar</div><div class="value">${r.totalForecastSales.toFixed(1)}</div><div class="tiny">${r.expectedDemand>0?(r.totalForecastSales/r.expectedDemand*100).toFixed(1).replace('.',','):'0,0'} % der erwarteten Nachfrage</div></div>
+    <div class="production-kpi"><div class="label">Gefährdet / nicht lieferbar</div><div class="value">${r.lostSales.toFixed(1)}</div><div class="tiny">${r.expectedDemand>0?(r.lostSales/r.expectedDemand*100).toFixed(1).replace('.',','):'0,0'} % der erwarteten Nachfrage</div></div>
     <div class="production-kpi"><div class="label">Simulierte Nachbestellungen</div><div class="value">${euro(r.reorderCost)}</div><div class="tiny">${r.totalReorders} Bestellpakete</div></div>
   </div>
   <div class="info">
@@ -984,6 +1011,12 @@ function renderRealReinvestmentForecast(){
     ${netChange>=0?`Gegenüber dem Start der Prognose steigt der freie Cash-Bestand um ${euro(netChange)}.`:`Gegenüber dem Start der Prognose sinkt der freie Cash-Bestand um ${euro(Math.abs(netChange))}.`}
     ${r.breakEvenWeek===null?' Das bisher investierte Einkaufskapital wäre in diesem Zeitraum noch nicht vollständig zurückverdient.':` Der Break-even ist der erste Zeitpunkt, an dem der kumulierte Cashflow nach Einkauf, Verkäufen und notwendigen Nachbestellungen wieder mindestens 0 € erreicht.`}
   </div>
+  ${r.shortages.length?`<details class="shortage-details" style="margin-top:10px" open>
+    <summary>Warum Verkäufe gefährdet sind (${r.shortages.length} Engpässe)</summary>
+    <div class="forecast-reorder-wrap"><table class="forecast-reorder-table"><thead><tr><th>Artikel</th><th>Farbe</th><th>Betroffene Verkäufe*</th><th>Fehlmenge kumuliert</th><th>Erstmals</th><th>Nächste Lieferung</th></tr></thead><tbody>
+    ${r.shortages.map(x=>`<tr><td><span class="idchip">${esc(x.id)}</span> ${esc(warehouseItemName(x.kind,x.id))}</td><td>${warehouseColorChip(x.color)}</td><td>${x.lostSales.toFixed(1)}</td><td>${x.missingUnits.toFixed(1)}</td><td>Woche ${x.firstWeek}</td><td>${x.nextArrival===null?'keine offene Bestellung':`Woche ${x.nextArrival}`}</td></tr>`).join('')}
+    </tbody></table></div><div class="tiny">*Ein nicht lieferbarer Verkauf kann mehrere fehlende Artikel betreffen; die Artikelwerte dürfen deshalb nicht einfach addiert werden.</div>
+  </details>`:`<div class="info" style="margin-top:10px"><strong>Keine Lieferengpässe simuliert.</strong> Die erwartete Nachfrage kann im gewählten Zeitraum vollständig bedient werden.</div>`}
   <details style="margin-top:10px"><summary>Bestell- & Lieferplan (${r.events.length})</summary><div class="forecast-week-events">${r.events.map(e=>`<div class="forecast-event"><span>Woche ${e.week}</span><span>${esc(e.text)}</span><strong>${euro(e.amount)}</strong></div>`).join('')||'<div class="tiny">Keine Ereignisse.</div>'}</div></details>`
 }
 function renderForecastAll(){
