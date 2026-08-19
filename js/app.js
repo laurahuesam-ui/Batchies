@@ -23,6 +23,92 @@ function batchIsCalculable(b){
     return v&&packagingIsCalculable(v)
   })
 }
+function overviewActualWarehouseValue(){
+  return Array.isArray(state.realWarehouse)
+    ? state.realWarehouse.reduce((a,x)=>a+num(x.paidTotal),0)
+    : 0
+}
+function overviewActualWarehouseUnits(){
+  return Array.isArray(state.realWarehouse)
+    ? state.realWarehouse.reduce((a,x)=>a+num(x.qty),0)
+    : 0
+}
+function overviewActualSalesStats(){
+  const sales=Array.isArray(state.salesHistory)?state.salesHistory:[];
+  const now=Date.now(),cut30=now-30*24*3600*1000;
+  return{
+    count:sales.reduce((a,x)=>a+num(x.qty,1),0),
+    orders:sales.length,
+    revenue:sales.reduce((a,x)=>a+num(x.revenue),0),
+    cogs:sales.reduce((a,x)=>a+num(x.cogs),0),
+    last30:sales.filter(x=>new Date(x.soldAt).getTime()>=cut30).reduce((a,x)=>a+num(x.qty,1),0),
+    latest:sales.slice().sort((a,b)=>new Date(b.soldAt)-new Date(a.soldAt)).slice(0,5)
+  }
+}
+function overviewReorderRows(){
+  try{
+    if(typeof allocatedForecastRows!=='function'||typeof reorderPointFor!=='function')return[];
+    return allocatedForecastRows().map(r=>{
+      const stock=num(r.allocatedStock),
+        point=num(reorderPointFor(r)),
+        weeks=r.weekly>0?stock/r.weekly:Infinity;
+      return{...r,stock,point,weeks,alert:stock<=point+1e-9}
+    }).filter(x=>x.alert).sort((a,b)=>{
+      const aw=Number.isFinite(a.weeks)?a.weeks:99999,bw=Number.isFinite(b.weeks)?b.weeks:99999;
+      return aw-bw
+    })
+  }catch(err){console.error('Overview Nachbestellung:',err);return[]}
+}
+function overviewSellableVariants(){
+  try{
+    if(typeof realSaleVariantsForBatch!=='function')return{sellable:0,total:0};
+    let sellable=0,total=0;
+    (state.batches||[]).forEach(b=>{
+      const vars=realSaleVariantsForBatch(b);
+      vars.forEach(v=>{total++;if(num(v.capacity)>0)sellable++})
+    });
+    return{sellable,total}
+  }catch(err){return{sellable:0,total:0}}
+}
+function renderOverviewLiveStats(){
+  const el=$('#overviewLiveStats');if(!el)return;
+  const stockValue=overviewActualWarehouseValue(),
+    stockUnits=overviewActualWarehouseUnits(),
+    lots=Array.isArray(state.realWarehouse)?state.realWarehouse.length:0,
+    sales=overviewActualSalesStats(),
+    reorder=overviewReorderRows(),
+    variants=overviewSellableVariants(),
+    gross=sales.revenue-sales.cogs;
+
+  const reorderHtml=reorder.length
+    ? reorder.slice(0,8).map(x=>`<div class="overview-alert-row">
+        <span><span class="idchip">${esc(x.id)}</span></span>
+        <span><strong>${esc(typeof warehouseItemName==='function'?warehouseItemName(x.kind,x.id):x.id)}</strong>${x.color?` · ${esc(x.color)}`:''}<div class="why">Bestand ${x.stock.toFixed(1)} · Nachbestellpunkt ${x.point.toFixed(1)}${Number.isFinite(x.weeks)?` · reicht ca. ${x.weeks.toFixed(1)} Wo.`:''}</div></span>
+        <span class="overview-action-badge bad">Nachbestellen</span>
+      </div>`).join('')
+    : '<div class="info"><strong>Aktuell kein Nachbestellbedarf erkannt.</strong></div>';
+
+  const salesHtml=sales.latest.length
+    ? sales.latest.map(x=>`<div class="overview-sale-row">
+        <span>${new Date(x.soldAt).toLocaleDateString('de-DE')}</span>
+        <span><strong>${esc(x.bid||'Batch')}</strong>${x.color?` · ${esc(x.color)}`:''} · ${num(x.qty,1)}×</span>
+        <strong>${euro(x.revenue)}</strong>
+      </div>`).join('')
+    : '<div class="muted">Noch keine echten Verkäufe gebucht.</div>';
+
+  el.innerHTML=`<div class="overview-live-kpis">
+    <div class="overview-live-kpi"><div class="label">Echter Lagerwert</div><div class="value">${euro(stockValue)}</div><div class="sub">${lots} Lagerpositionen · ${stockUnits.toLocaleString('de-DE')} Einheiten</div></div>
+    <div class="overview-live-kpi"><div class="label">Verkäufe gesamt</div><div class="value">${sales.count.toLocaleString('de-DE')}</div><div class="sub">${sales.orders} Buchungen · letzte 30 Tage: ${sales.last30.toLocaleString('de-DE')}</div></div>
+    <div class="overview-live-kpi"><div class="label">Echter Umsatz</div><div class="value">${euro(sales.revenue)}</div><div class="sub">aus gebuchten Verkäufen</div></div>
+    <div class="overview-live-kpi"><div class="label">Entnommener Warenwert</div><div class="value">${euro(sales.cogs)}</div><div class="sub">tatsächliche Lager-EK der Verkäufe</div></div>
+    <div class="overview-live-kpi"><div class="label">Umsatz − Warenwert</div><div class="value ${gross>=0?'positive':'negative'}">${euro(gross)}</div><div class="sub">vor Etsy, Arbeit, Versand & Fixkosten</div></div>
+    <div class="overview-live-kpi"><div class="label">Direkt lieferbare Varianten</div><div class="value">${variants.sellable} / ${variants.total}</div><div class="sub">aus dem echten Lager</div></div>
+  </div>
+  <div class="overview-live-grid">
+    <div class="overview-live-section"><h3>Nachbestellen & Engpässe ${reorder.length?`(${reorder.length})`:''}</h3><div class="overview-alert-list">${reorderHtml}</div>${reorder.length>8?`<div class="tiny" style="margin-top:6px">+ ${reorder.length-8} weitere Positionen im Reiter Verkäufe.</div>`:''}</div>
+    <div class="overview-live-section"><h3>Letzte echte Verkäufe</h3><div class="overview-sales-list">${salesHtml}</div></div>
+  </div>`
+}
 function renderOverview(){
   const ps=state.products||[],bs=state.batches||[];
   const productCalcCount=ps.filter(productIsCalculable).length;
@@ -37,11 +123,7 @@ function renderOverview(){
   $('#kpiBatchesCalc').textContent=batchCalcCount+' / '+bs.length;
   $('#kpiBatchesCalcSub').textContent=(bs.length-batchCalcCount)+' noch unvollständig';
 
-  const s=state.settings;
-  $('#feeRateSummary').textContent=(s.transactionPct+s.paymentPct).toFixed(2).replace('.',',')+' %';
-  $('#feeFixedSummary').textContent=euro(s.listingFee+s.paymentFixed);
-  $('#feeAdsSummary').textContent=s.offsitePct.toFixed(2).replace('.',',')+' %';
-  $('#feeFxSummary').textContent=s.currencyPct.toFixed(2).replace('.',',')+' %';
+  renderOverviewLiveStats();
 
   const el=$('#overviewProducts');
   if(!ps.length){
