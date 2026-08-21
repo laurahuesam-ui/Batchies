@@ -77,6 +77,8 @@ s.packaging.forEach((v,i)=>{
   if(!n){n=++maxV;v.vid=displayId('VID',n)}else maxV=Math.max(maxV,n);
   v.name=String(v.name||'');
   v.status=v.status||'idea';
+  v.colors=normalizeProductColors(v.colors);
+  v.baseColors=normalizeBaseColors(v.baseColors,v.colors);
   if(!Array.isArray(v.suppliers))v.suppliers=[];
   v.suppliers=v.suppliers.map((x,j)=>{
     const priceType=x.priceType==='consumable'?'consumable':(x.priceType==='set'?'set':'unit'),

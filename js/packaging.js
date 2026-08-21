@@ -409,12 +409,31 @@ function renderPackagingSupplierRows(list){
   $$('.packaging-supplier-row').forEach((r,i)=>renderPackagingTierData(r,rows[i]||{}));
   bindPackagingSupplierEvents();
 }
+function renderPackagingColorPicker(selected=[]){
+  const chosen=new Set(normalizeProductColors(selected)),
+    el=$('#packagingColorPicker');
+  if(!el)return;
+  el.innerHTML=PRODUCT_COLORS.map(c=>`<button type="button" class="color-choice ${chosen.has(c.name)?'selected':''}" data-color="${esc(c.name)}" aria-pressed="${chosen.has(c.name)?'true':'false'}" title="${esc(c.name)}"><span class="color-choice-dot" style="--dot:${c.hex}"></span><span>${esc(c.name)}</span></button>`).join('');
+  el.querySelectorAll('.color-choice').forEach(btn=>btn.addEventListener('click',e=>{
+    e.preventDefault();
+    e.stopPropagation();
+    const active=!btn.classList.contains('selected');
+    btn.classList.toggle('selected',active);
+    btn.setAttribute('aria-pressed',active?'true':'false')
+  }))
+}
+function collectPackagingColors(){
+  return $$('#packagingColorPicker .color-choice.selected').map(x=>x.dataset.color).filter(Boolean)
+}
+
 function collectPackagingDraft(){
   return {
     key:$('#packagingKey').value||crypto.randomUUID(),
     vid:$('#packagingVid').value,
     name:$('#packagingName').value.trim(),
     status:$('#packagingStatus').value,
+    colors:collectPackagingColors(),
+    baseColors:deriveBaseColors(collectPackagingColors()),
     suppliers:collectPackagingSuppliers(),
     notes:$('#packagingNotes').value.trim()
   };
@@ -427,6 +446,7 @@ function openPackaging(key=null){
   $('#packagingModalTitle').textContent=v?'Verpackungsmaterial bearbeiten':'Neues Verpackungsmaterial';
   $('#packagingName').value=v?.name||'';
   $('#packagingStatus').value=v?.status||'idea';
+  renderPackagingColorPicker(v?.colors||[]);
   renderPackagingSupplierRows(v?.suppliers||[]);
   $('#packagingNotes').value=v?.notes||'';
   $('#deletePackagingBtn').classList.toggle('hidden',!v);
@@ -437,7 +457,7 @@ function renderPackaging(){
   const q=normalizeText($('#searchPackaging')?.value||'');
   const list=(state.packaging||[]).slice()
     .sort((a,b)=>parseIdNumber(a.vid,'VID')-parseIdNumber(b.vid,'VID'))
-    .filter(v=>!q||normalizeText([v.vid,v.name,...(v.suppliers||[]).map(s=>s.name)].join(' ')).includes(q));
+    .filter(v=>!q||normalizeText([v.vid,v.name,...(v.colors||[]),...(v.suppliers||[]).map(s=>s.name)].join(' ')).includes(q));
   const body=$('#packagingBody');
   if(!body)return;
   body.innerHTML=list.length?list.map(v=>{
@@ -452,7 +472,7 @@ function renderPackaging(){
     return `<tr>
       <td><span class="idchip">${esc(v.vid)}</span></td>
       <td>${img?`<img class="product-thumb" src="${esc(img)}" alt="">`:'<div class="product-thumb-empty">kein Bild</div>'}</td>
-      <td><div class="name">${esc(v.name)}</div></td>
+      <td><div class="name">${esc(v.name)}</div>${productColorDots(v.colors,true)}</td>
       <td><span class="badge ${v.status}">${statusLabel(v.status)}</span></td>
       <td><div class="supplier-links">${links||'<span class="muted">–</span>'}</div></td>
       <td class="money">${pref?euro(unit):'–'}</td>
@@ -463,12 +483,12 @@ function renderPackaging(){
   $$('.packaging-edit').forEach(b=>b.onclick=()=>openPackaging(b.dataset.key));
 }
 function exportPackagingCsv(){
-  const h=['VID','Verpackungsmaterial','Status','Lieferant','Bevorzugt','URL','Preisart','Eingabepreis','Mindestmenge / Setmenge','Versandkosten','Preis/Stück','Bestellwert','Bild-URL','Zoll 12 %','Notizen'];
+  const h=['VID','Verpackungsmaterial','Status','Farben','Lieferant','Bevorzugt','URL','Preisart','Eingabepreis','Mindestmenge / Setmenge','Versandkosten','Preis/Stück','Bestellwert','Bild-URL','Zoll 12 %','Notizen'];
   const rows=[];
   (state.packaging||[]).forEach(v=>{
     const suppliers=v.suppliers?.length?v.suppliers:[null];
     suppliers.forEach(s=>rows.push([
-      v.vid,v.name,statusLabel(v.status),
+      v.vid,v.name,statusLabel(v.status),(v.colors||[]).join(', '),
       s?.name||'',s?.preferred?'Ja':'Nein',s?.url||'',
       s?.priceType==='set'?'Set':'Stück',
       s?(s.priceType==='set'?s.setPrice:s.price):'',
