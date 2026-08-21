@@ -85,6 +85,8 @@ s.packaging.forEach((v,i)=>{
       price=priceType==='set'?setPrice/setQty:(priceType==='consumable'?0:num(x.price));
     return{...x,id:x.id||crypto.randomUUID(),name:x.name||'Lieferant '+(j+1),url:x.url||'',priceType,price,
       minOrderQty:priceType==='unit'?Math.max(1,num(x.minOrderQty,1)):1,
+      unitIsSet:priceType==='unit'&&!!x.unitIsSet,
+      unitSetQty:priceType==='unit'&&x.unitIsSet?Math.max(1,num(x.unitSetQty,1)):1,
       setPrice:priceType==='set'?setPrice:0,setQty:priceType==='set'?setQty:1,
       purchasePrice:num(x.purchasePrice),packageCount:Math.max(1,num(x.packageCount,1)),
       amountPerPackage:Math.max(0.0001,num(x.amountPerPackage,1)),consumptionUnit:x.consumptionUnit||'m',
