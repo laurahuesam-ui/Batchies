@@ -72,28 +72,20 @@ function batchTargetProfitRecommendation(b,nonPlatformCosts,eVar,eFixed){
     const price=denom>0?(nonPlatformCosts+eFixed+manual)/denom:0;
     return {recommended:price,targetProfit:manual,targetMode:'manual'}
   }
-  const tiers=[
-    {max:20,profit:5,label:'bis 20 € → 5 €'},
-    {max:40,profit:10,label:'bis 40 € → 10 €'},
-    {max:50,profit:15,label:'bis 50 € → 15 €'},
-    {max:75,profit:20,label:'bis 75 € → 20 €'}
-  ];
-  for(const t of tiers){
-    const denom=1-eVar,
-      price=denom>0?(nonPlatformCosts+eFixed+t.profit)/denom:0;
-    if(price<=t.max+1e-9)return {recommended:price,targetProfit:t.profit,targetMode:'auto',targetLabel:t.label}
+  // Automatisches Gewinnziel: 25 % des empfohlenen VK, mindestens 2,50 €.
+  // Zuerst prüfen, ob der Mindestgewinn zu einem VK bis 10 € führt.
+  const minProfit=2.5,minDenom=1-eVar,
+    minPrice=minDenom>0?(nonPlatformCosts+eFixed+minProfit)/minDenom:0;
+  if(minPrice<=10+1e-9){
+    return {recommended:minPrice,targetProfit:minProfit,targetMode:'auto',targetLabel:'25 % des VK · mindestens 2,50 €'}
   }
-  const denom=1-eVar-.25,
+  const targetRate=.25,denom=1-eVar-targetRate,
     price=denom>0?(nonPlatformCosts+eFixed)/denom:0;
-  return {recommended:price,targetProfit:price*.25,targetMode:'auto',targetLabel:'über 75 € → 25 % des VK'}
+  return {recommended:price,targetProfit:price*targetRate,targetMode:'auto',targetLabel:'25 % des VK'}
 }
 function automaticTargetProfitForPrice(price){
   const vk=Math.max(0,num(price));
-  if(vk<=20)return 5;
-  if(vk<=40)return 10;
-  if(vk<=50)return 15;
-  if(vk<=75)return 20;
-  return vk*0.25
+  return Math.max(2.5,vk*.25)
 }
 function batchCalc(b,overridePrice=null){
   let productCost=0,packagingCost=0;
@@ -116,7 +108,7 @@ function batchCalc(b,overridePrice=null){
     target=batchTargetProfitRecommendation(b,nonPlatformCosts,eVar,eFixed);
   let recommended=Math.ceil((Math.max(0,target.recommended)-1e-9)*10)/10;
   // Nach Rundung Zielgewinn auf Basis des endgültigen empfohlenen VK anzeigen.
-  const targetProfit=target.targetMode==='auto'&&recommended>75?recommended*.25:target.targetProfit;
+  const targetProfit=target.targetMode==='auto'?Math.max(2.5,recommended*.25):target.targetProfit;
   return{productCost,packagingCost,extra:packagingCost,total:materialCost,costs:materialCost,
     price,revenue,fees,laborCost,outboundShipping,adCost,riskCost,postTripDistanceOneWay,postTripKmCost,postTripShare,postTripCost,fixedAllocation,db1,db2,profit,margin,
     recommended,targetProfit,targetMode:target.targetMode,targetLabel:target.targetLabel||'eigener Zielgewinn'}
