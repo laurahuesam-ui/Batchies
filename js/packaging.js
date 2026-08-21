@@ -19,6 +19,8 @@ function packagingSupplierRowHtml(s){
       <div class="supplier-cell"><span class="supplier-mini-label packaging-unit-cost-label">${type==='consumable'?'Preis/Einheit':'Preis/Stück'}</span><input class="packaging-supplier-unit-cost" value="${euro(unit)}" readonly></div>
       <div class="supplier-cell"><span class="supplier-mini-label">Bestellwert</span><input class="packaging-supplier-order-cost" value="${euro(order)}" readonly></div>
       <div class="supplier-cell supplier-image-cell"><span class="supplier-mini-label">Bild-URL</span><input class="packaging-supplier-image" type="url" value="${esc(s.imageUrl||'')}" placeholder="https://…"></div>
+      <div class="supplier-cell"><span class="supplier-mini-label">MwSt. %</span><input class="packaging-supplier-vat-rate" type="number" min="0" step="0.1" value="${Math.max(0,num(s.vatRate,0))}" placeholder="0"></div>
+      <div class="supplier-cell"><span class="supplier-mini-label">MwSt.</span><label class="supplier-toggle" title="Aktivieren, wenn die MwSt. bereits in Preis/Versand enthalten ist"><input class="packaging-supplier-vat-included" type="checkbox" ${s.vatIncluded?'checked':''}><span>inkl.</span></label></div>
       <div class="supplier-cell customs-cell"><span class="supplier-mini-label">Zoll</span><label class="supplier-toggle" title="12 % Zollpuffer"><input class="packaging-supplier-customs" type="checkbox" ${s.customs?'checked':''}><span>12 %</span></label></div>
       <div class="supplier-cell preferred-cell"><span class="supplier-mini-label">Bevorzugt</span><label class="supplier-preferred"><input class="packaging-supplier-star" type="radio" name="preferredPackagingSupplier" ${s.preferred?'checked':''}><span>⭐</span></label></div>
       <div class="supplier-remove-cell"><span class="supplier-mini-label">&nbsp;</span><button type="button" class="iconbtn remove-packaging-supplier">✕</button></div>
@@ -58,6 +60,8 @@ function packagingSupplierFromRow(r,i){
     consumptionUnit:type==='consumable'?consumptionUnit:'Stück',
     totalShipping:num(r.querySelector('.packaging-supplier-total-shipping').value),
     imageUrl:r.querySelector('.packaging-supplier-image').value.trim(),
+    vatRate:Math.max(0,num(r.querySelector('.packaging-supplier-vat-rate')?.value,0)),
+    vatIncluded:!!r.querySelector('.packaging-supplier-vat-included')?.checked,
     customs:r.querySelector('.packaging-supplier-customs').checked,
     preferred:r.querySelector('.packaging-supplier-star').checked,
     priceTiers:collectPackagingPriceTiers(r),

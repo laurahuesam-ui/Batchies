@@ -54,11 +54,14 @@ function supplierTierUnitPrice(s,qty=supplierQtyBase(s)){const tiers=(s?.priceTi
 function supplierShippingForQty(s,qty=supplierQtyBase(s)){const raw=Math.max(1,supplierPiecesToRawQty(s,qty)),points=s?.shippingPoints||[],hit=points.find(x=>Math.max(1,num(x.qty,1))===raw);if(hit){const actual=num(hit.shippingWithCustoms);return actual>0?{shipping:actual,includesCustoms:true}:{shipping:num(hit.shipping),includesCustoms:false}}return{shipping:num(s?.totalShipping),includesCustoms:false}}
 function supplierUnitShipping(s){if(!s)return 0;const q=supplierCalcQty(s),ship=supplierCalcShipping(s);return ship.shipping/q}
 function supplierBaseOrderCost(s){if(!s)return 0;const q=supplierCalcQty(s),ship=supplierCalcShipping(s);if(s.priceType==='consumable')return num(s.purchasePrice)+ship.shipping;return (s.priceType==='set'?num(s.setPrice):supplierCalcUnitPrice(s)*q)+ship.shipping}
+function supplierVatRate(s){return Math.max(0,num(s?.vatRate,0))/100}
+function supplierVatIncluded(s){return !!s?.vatIncluded}
+function supplierVatAddon(s,amount){return supplierVatIncluded(s)?0:Math.max(0,num(amount))*supplierVatRate(s)}
 function supplierHasCustoms(s){return !!s&&!!s.customs}
 function supplierCustomsCost(s){if(!supplierHasCustoms(s))return 0;const ship=supplierCalcShipping(s);if(ship.includesCustoms)return 0;return supplierBaseOrderCost(s)*0.12}
-function supplierOrderCost(s){return supplierBaseOrderCost(s)+supplierCustomsCost(s)}
+function supplierOrderCost(s){const subtotal=supplierBaseOrderCost(s)+supplierCustomsCost(s);return subtotal+supplierVatAddon(s,subtotal)}
 function supplierLandedUnitCost(s){return s?supplierOrderCost(s)/supplierCalcQty(s):0}
-function productInboundShipping(p){const s=(p.suppliers||[]).find(x=>x.preferred)||(p.suppliers||[])[0];if(!s)return 0;const ship=supplierUnitShipping(s),customs=supplierHasCustoms(s)?(num(p.basePrice)+ship)*0.12:0;return ship+customs}
+function productInboundShipping(p){const s=(p.suppliers||[]).find(x=>x.preferred)||(p.suppliers||[])[0];if(!s)return 0;const ship=supplierUnitShipping(s),customs=supplierHasCustoms(s)?(num(p.basePrice)+ship)*0.12:0,subtotal=num(p.basePrice)+ship+customs,vat=supplierVatAddon(s,subtotal);return ship+customs+vat}
 function productPurchaseCost(p){return num(p.basePrice)+productInboundShipping(p)+(p.costs||[]).reduce((a,c)=>a+num(c.amount),0)}
 function costTotal(p){return productPurchaseCost(p)+num(p.shippingCost)}
 function calcProduct(p,overridePrice=null){const price=overridePrice===null?num(p.salePrice):num(overridePrice),shippingCharged=num(p.shippingCharged),revenue=price+shippingCharged,rate=variableFeeRate(p),baseFee=fixedFees(p),rawPlatform=baseFee+revenue*rate,feeVat=rawPlatform*(state.settings.feeVatPct/100),fees=rawPlatform+feeVat,costs=costTotal(p),profit=revenue-costs-fees,margin=revenue>0?profit/revenue*100:0,target=num(p.targetMargin,30)/100,vatMult=1+state.settings.feeVatPct/100,eVar=rate*vatMult,eFixed=baseFee*vatMult,denom=1-target-eVar;let recommended=0;if(denom>0){const needed=(costs+eFixed)/denom;recommended=Math.max(0,needed-shippingCharged);recommended=Math.ceil((recommended-1e-9)*10)/10}return{price,revenue,fees,costs,profit,margin,recommended}}
