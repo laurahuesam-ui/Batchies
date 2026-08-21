@@ -317,12 +317,18 @@ function planningOptimizePieceOrder(kind,id,totalShort,s){
     .filter(x=>x.extraCash>=0&&x.cost<=requiredQuote.cost*1.10&&x.unitSavingPct>=5)
     .sort((a,b)=>b.unitSavingPct-a.unitSavingPct||a.extraCash-b.extraCash)[0];
 
-  const chosen=cheaperTotal||requiredQuote;
+  const chosen=cheaperTotal||requiredQuote,
+    activeSource=supplierActiveCalcSource(s),
+    demandQty=demandRounded,
+    forcedByPlan=activeQty>demandQty+1e-9&&required===activeQty,
+    forcedByMoq=moq>demandQty+1e-9&&required===moq;
+
   return{
     ordered:chosen.qty,cost:chosen.cost,moq,required,
+    demandQty,activeQty,activeSource,forcedByPlan,forcedByMoq,
     requiredCost:requiredQuote.cost,requiredUnit:requiredQuote.unit,
     recommended:!!cheaperTotal,
-    reason:cheaperTotal?'nahe Versandmenge ist insgesamt günstiger':'Bedarf/MOQ',
+    reason:cheaperTotal?'nahe Versandmenge ist insgesamt günstiger':forcedByPlan?'aktive Kalkulations-/Planmenge':forcedByMoq?'MOQ':'Bedarf',
     shippingSource:chosen.shipping?.source||'',
     valueOption:sensibleValue||null,
     candidates
@@ -590,9 +596,21 @@ function renderPurchaseCalc(){
       }else if(g.priceType==='consumable'){
         order=`${g.totalShort} fehlen · feste Packgröße ${g.moq} → ${g.ordered} bestellen`
       }else{
-        order=g.totalShort<g.moq
-          ? `${g.totalShort} fehlen · MOQ ${g.moq} → ${g.moq} bestellen`
-          : `${g.totalShort} fehlen · MOQ ${g.moq} erreicht → ${g.ordered} Stück bestellen`
+        const opt=g.orderOptimization;
+        if(opt?.forcedByPlan){
+          const src=opt.activeSource?.type==='shipping'
+            ? `aktiver Versandpunkt ${opt.activeSource.qty}`
+            : opt.activeSource?.type==='tier'
+              ? `aktive Preisstaffel ab ${opt.activeSource.qty}`
+              : `aktive Planmenge ${opt.activeQty}`;
+          order=`${g.totalShort} fehlen · MOQ ${g.moq} · ${src} → ${g.ordered} Stück bestellen`
+        }else if(opt?.recommended&&g.ordered>opt.required){
+          order=`${g.totalShort} fehlen · MOQ ${g.moq} · ${opt.required} benötigt → ${g.ordered} Stück optimiert bestellen`
+        }else if(g.totalShort<g.moq){
+          order=`${g.totalShort} fehlen · MOQ ${g.moq} → ${g.ordered} Stück bestellen`
+        }else{
+          order=`${g.totalShort} fehlen · MOQ ${g.moq} erreicht → ${g.ordered} Stück bestellen`
+        }
       }
     }
     const arrival=Object.entries(g.arrivals||{}).filter(([,n])=>n>1e-9).map(([c,n])=>`${c||'frei/neutral'} ${Number.isInteger(n)?n:n.toFixed(2)}`).join(' · ');
@@ -611,13 +629,14 @@ function renderPurchaseCalc(){
         <span>${x.color?warehouseColorChip(x.color):warehouseColorChip('')}</span><span>Bedarf ${x.need}</span><span>Lager ${x.stock}</span><span>${x.short?`fehlen ${x.short}`:'✓ gedeckt'}</span>
       </div>`).join('')}</div>
       ${arrival?`<div class="tiny" style="margin-top:5px"><strong>Bestellung liefert:</strong> ${esc(arrival)}</div>`:''}
+      ${opt?.forcedByPlan?`<div class="tiny"><strong>Warum mehr als Bedarf?</strong> Die aktive Kalkulationszeile dieses Lieferanten setzt die Planmenge auf ${opt.activeQty} Stück. Wenn du nur ${opt.demandQty} Stück bestellen willst, ändere bei Produkt → Lieferant die aktive Kalkulationszeile.</div>`:''}
       ${opt?.shippingSource?`<div class="tiny"><strong>Versand:</strong> ${esc(opt.shippingSource)}</div>`:''}
       ${opt?.recommended?`<div class="info" style="margin-top:5px"><strong>Optimiert:</strong> ${opt.required} Stück wären ${euro(opt.requiredCost)}, aber ${opt.ordered} Stück kosten insgesamt nur ${euro(opt.cost)}.</div>`:''}
       ${valueHint?`<div class="tiny" style="margin-top:5px"><strong>Sinnvolle Alternative:</strong> ${valueHint}</div>`:''}
       ${g.orderComparison?.length>1?`<details class="order-comparison" style="margin-top:6px" ${g.id==='PID-0003'?'open':''}>
         <summary>Sinnvolle Bestellmengen vergleichen (${g.orderComparison.length})</summary>
         <div class="table-wrap"><table class="order-comparison-table"><thead><tr><th>Menge</th><th>Ware</th><th>Versand inkl. ggf. Zollabw.</th><th>Gesamt</th><th>€/Stk.</th></tr></thead><tbody>
-        ${g.orderComparison.map(q=>`<tr class="${q.isRequired?'comparison-required':''}"><td>${q.qty}${q.isRequired?' · Bedarf/MOQ':''}</td><td>${euro(q.goods)}</td><td>${euro(q.shipping)}<div class="tiny">${esc(q.shippingSource)}</div></td><td><strong>${euro(q.cost)}</strong></td><td>${euro(q.unit)}</td></tr>`).join('')}
+        ${g.orderComparison.map(q=>`<tr class="${q.isRequired?'comparison-required':''}"><td>${q.qty}${q.isRequired?' · aktuelle Planbasis':''}</td><td>${euro(q.goods)}</td><td>${euro(q.shipping)}<div class="tiny">${esc(q.shippingSource)}</div></td><td><strong>${euro(q.cost)}</strong></td><td>${euro(q.unit)}</td></tr>`).join('')}
         </tbody></table></div>
       </details>`:''}
     </div>`

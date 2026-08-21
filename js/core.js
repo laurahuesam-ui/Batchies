@@ -29,20 +29,34 @@ function mergeRecoveryArray(recovery,current,idField){
 }
 function loadState(){
   let raw=null;
-  try{raw=JSON.parse(localStorage.getItem(STORAGE_KEY))}catch(err){console.error('LocalStorage unlesbar; Recovery wird verwendet.',err)}
+  try{raw=JSON.parse(localStorage.getItem(STORAGE_KEY))}
+  catch(err){console.error('LocalStorage unlesbar; nur dann wird Recovery verwendet.',err)}
+
   const recovery=typeof RECOVERY_STATE!=='undefined'?structuredClone(RECOVERY_STATE):structuredClone(defaultState);
-  const current=raw&&typeof raw==='object'?structuredClone(raw):{};
+  const hasCurrent=!!(raw&&typeof raw==='object');
+  const current=hasCurrent?structuredClone(raw):{};
+
   const s={
-    ...structuredClone(defaultState),...recovery,...current,
-    settings:{...defaultState.settings,...(recovery.settings||{}),...(current.settings||{})},
-    counters:{...defaultState.counters,...(recovery.counters||{}),...(current.counters||{})},
-    categoryLearning:{...defaultState.categoryLearning,...(recovery.categoryLearning||{}),...(current.categoryLearning||{})}
+    ...structuredClone(defaultState),
+    ...(hasCurrent?current:recovery),
+    settings:{...defaultState.settings,...(hasCurrent?(current.settings||{}):(recovery.settings||{}))},
+    counters:{...defaultState.counters,...(hasCurrent?(current.counters||{}):(recovery.counters||{}))},
+    categoryLearning:{...defaultState.categoryLearning,...(hasCurrent?(current.categoryLearning||{}):(recovery.categoryLearning||{}))}
   };
-  s.products=mergeRecoveryArray(recovery.products,current.products,'pid');
-  s.packaging=mergeRecoveryArray(recovery.packaging,current.packaging,'vid');
-  s.batches=mergeRecoveryArray(recovery.batches,current.batches,'bid');
-  s.investments=mergeRecoveryArray(recovery.investments,current.investments,'key');
-  try{migrateState(s)}catch(err){console.error('Migration fehlgeschlagen; Recovery bleibt erhalten.',err)}
+
+  if(hasCurrent){
+    s.products=Array.isArray(current.products)?structuredClone(current.products):[];
+    s.packaging=Array.isArray(current.packaging)?structuredClone(current.packaging):[];
+    s.batches=Array.isArray(current.batches)?structuredClone(current.batches):[];
+    s.investments=Array.isArray(current.investments)?structuredClone(current.investments):[];
+  }else{
+    s.products=Array.isArray(recovery.products)?structuredClone(recovery.products):[];
+    s.packaging=Array.isArray(recovery.packaging)?structuredClone(recovery.packaging):[];
+    s.batches=Array.isArray(recovery.batches)?structuredClone(recovery.batches):[];
+    s.investments=Array.isArray(recovery.investments)?structuredClone(recovery.investments):[];
+  }
+
+  try{migrateState(s)}catch(err){console.error('Migration fehlgeschlagen.',err)}
   return s
 }
 function migrateAlibabaCustomsOnce(state){
