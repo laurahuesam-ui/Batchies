@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#24513b">
 <meta name="description" content="Batchies – Produkt- und Batchentwicklung, Lieferantenvergleich und Etsy-Preiskalkulation.">
-<link rel="manifest" href="manifest.webmanifest?v=3.5.6">
+<link rel="manifest" href="manifest.webmanifest?v=3.5.7">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <title>Batchies – Produktentwicklung</title>
@@ -213,12 +213,22 @@
 
 .supplier-unit-set-wrap{display:grid;grid-template-columns:58px minmax(62px,1fr);gap:5px;align-items:center}.supplier-unit-set-toggle{height:39px}.supplier-unit-set-qty{min-width:0}.supplier-grid{grid-template-columns:58px 112px minmax(120px,.9fr) 86px 125px 78px 98px 92px 84px 92px minmax(115px,.85fr) 60px 56px 34px!important}
 @media(max-width:1180px){.supplier-unit-set-cell{grid-column:span 2}.supplier-unit-set-wrap{grid-template-columns:70px 1fr}}
+
+.real-sales-batch-list{display:grid;gap:8px}
+.real-sales-batch-group{border:1px solid var(--line);border-radius:12px;background:#fff;overflow:hidden}
+.real-sales-batch-group>summary{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 12px;cursor:pointer;list-style:none}
+.real-sales-batch-group>summary::-webkit-details-marker{display:none}
+.real-sales-batch-group>summary:before{content:"▸";font-size:12px;margin-right:7px}
+.real-sales-batch-group[open]>summary:before{content:"▾"}
+.real-sales-batch-group>summary>span:first-child{flex:1}
+.real-sales-batch-group .real-sales-grid{padding:0 10px 10px}
+.real-sales-grid.compact{grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
 </style>
 </head>
 <body>
 <div class="app">
 <header class="topbar">
-  <div class="brand"><div class="logo">B</div><div><h1>Batchies</h1><div class="subtitle">Produktentwicklung & Stammdaten · v3.5.6</div></div></div>
+  <div class="brand"><div class="logo">B</div><div><h1>Batchies</h1><div class="subtitle">Produktentwicklung & Stammdaten · v3.5.7</div></div></div>
   <div class="actions"><button class="btn" id="exportBackupBtn">Backup</button><button class="btn" id="importBackupBtn">Import</button><button class="btn primary" id="addProductBtn">+ Produkt</button><button class="btn primary" id="addBatchBtn">+ Batch</button><input type="file" id="backupFile" accept="application/json" hidden></div>
 </header>
 <nav class="tabs"><button class="tab active" data-tab="overview">Übersicht</button><button class="tab" data-tab="products">Produkte</button><button class="tab" data-tab="packaging">Verpackung</button><button class="tab" data-tab="batches">Batches</button><button class="tab" data-tab="warehouse">Lager</button><button class="tab" data-tab="sales">Verkäufe</button><button class="tab" data-tab="fees">Gebühren & Kalkulation</button><button class="tab" data-tab="investments">Investitionen</button><button class="tab" data-tab="simulation">Einkaufs-Simulation</button><button class="tab" data-tab="data">Stammdaten & CSV</button></nav>
@@ -314,7 +324,7 @@
   </div>
 
   <div class="card span12">
-    <div class="toolbar"><div><h2 class="section-title" style="margin-bottom:2px">Verkaufssimulation aus Restlager</h2><div class="muted">Berechnet aus dem echten Restlager, welche Batch-Farbvarianten noch wie oft vollständig verkauft werden könnten.</div></div><button class="btn" id="saleSimulationRefreshBtn" type="button">Neu berechnen</button></div>
+    <div class="toolbar"><div><h2 class="section-title" style="margin-bottom:2px">Verkaufssimulation aus Restlager</h2><div class="muted">Berechnet aus dem echten Restlager, welche Batch-Farbvarianten noch wie oft vollständig verkauft werden könnten.</div></div><div class="inline"><button class="btn secondary" id="saleSimulationCollapseAllBtn" type="button">Alle einklappen</button><button class="btn secondary" id="saleSimulationExpandAllBtn" type="button">Alle ausklappen</button><button class="btn" id="saleSimulationRefreshBtn" type="button">Neu berechnen</button></div></div>
     <div id="realStockSalesSimulation"></div>
   </div>
 
@@ -471,20 +481,20 @@
   <div class="modal-foot"><button type="button" class="btn danger hidden" id="deletePackagingBtn">Verpackungsmaterial löschen</button><span style="flex:1"></span><button type="button" class="btn cancel-packaging-dialog">Abbrechen</button><button type="submit" class="btn primary" value="save" id="savePackagingBtn">Speichern</button></div>
 </form></dialog>
 
-<script src="js/category-data.js?v=3.5.6"></script>
-<script src="js/recovery-data.js?v=3.5.6"></script>
-<script src="js/config.js?v=3.5.6"></script>
-<script src="js/colors.js?v=3.5.6"></script>
-<script src="js/core.js?v=3.5.6"></script>
-<script src="js/categories.js?v=3.5.6"></script>
-<script src="js/pricing.js?v=3.5.6"></script>
-<script src="js/products.js?v=3.5.6"></script>
-<script src="js/batches.js?v=3.5.6"></script>
-<script src="js/batch-suggestions.js?v=3.5.6"></script>
-<script src="js/exports.js?v=3.5.6"></script>
-<script src="js/simulation.js?v=3.5.6"></script>
-<script src="js/packaging.js?v=3.5.6"></script>
-<script src="js/warehouse.js?v=3.5.6"></script>
-<script src="js/sales.js?v=3.5.6"></script>
-<script src="js/app.js?v=3.5.6"></script>
+<script src="js/category-data.js?v=3.5.7"></script>
+<script src="js/recovery-data.js?v=3.5.7"></script>
+<script src="js/config.js?v=3.5.7"></script>
+<script src="js/colors.js?v=3.5.7"></script>
+<script src="js/core.js?v=3.5.7"></script>
+<script src="js/categories.js?v=3.5.7"></script>
+<script src="js/pricing.js?v=3.5.7"></script>
+<script src="js/products.js?v=3.5.7"></script>
+<script src="js/batches.js?v=3.5.7"></script>
+<script src="js/batch-suggestions.js?v=3.5.7"></script>
+<script src="js/exports.js?v=3.5.7"></script>
+<script src="js/simulation.js?v=3.5.7"></script>
+<script src="js/packaging.js?v=3.5.7"></script>
+<script src="js/warehouse.js?v=3.5.7"></script>
+<script src="js/sales.js?v=3.5.7"></script>
+<script src="js/app.js?v=3.5.7"></script>
 </body></html>

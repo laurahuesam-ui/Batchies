@@ -280,14 +280,57 @@ function salesGrowthBatchNeeds(b){
   (b.packagingItems||[]).forEach(i=>{if(i.vid)needs.push({kind:'VID',id:i.vid,qty:Math.max(.001,num(i.qty,1))})});
   return needs
 }
+function salesGrowthOrderCostForQty(s,orderedQty){
+  if(!s||orderedQty<=0)return 0;
+  const q=Math.max(.001,num(orderedQty));
+
+  // Unit products: calculate goods + shipping for exactly the quantity that
+  // is actually added to stock. This fixes the old mismatch where e.g. 2
+  // pieces were added but the cost of an active 120-piece calculation was charged.
+  if(s.priceType!=='set'&&s.priceType!=='consumable'){
+    const ship=typeof planningShippingForQty==='function'
+      ? planningShippingForQty(s,q)
+      : supplierShippingForQty(s,q),
+      goods=supplierTierUnitPrice(s,q)*q,
+      base=goods+ship.shipping,
+      customs=(supplierHasCustoms(s)&&!ship.includesCustoms)?base*.12:0;
+    return base+customs
+  }
+
+  // True set/consumable packages are indivisible and are charged per package.
+  const baseQty=Math.max(.001,supplierQtyBase(s)),
+    packs=Math.max(1,Math.ceil(q/baseQty-1e-9));
+  return packs*supplierOrderCost(s)
+}
 function salesGrowthOrderForNeed(kind,id,neededQty){
   const {x,s}=salesGrowthSupplier(kind,id);
   if(!x||!s)return{kind,id,name:x?.name||id,neededQty,baseQty:0,packs:0,orderedQty:0,cost:0,missing:true};
+
+  const needed=Math.max(.001,num(neededQty));
+
+  if(s.priceType!=='set'&&s.priceType!=='consumable'){
+    // The active calculation quantity expresses the realistic order size.
+    // MOQ remains a minimum. Above the selected realistic quantity, normal
+    // unit products can grow piece-by-piece; "unit sold as set" rounds to full sets.
+    const plannedMin=Math.max(supplierQtyBase(s),supplierCalcQty(s)),
+      setSize=typeof supplierUnitSetSize==='function'?supplierUnitSetSize(s):1,
+      rawNeeded=Math.ceil(Math.max(needed,plannedMin)/setSize-1e-9),
+      orderedQty=rawNeeded*setSize,
+      cost=salesGrowthOrderCostForQty(s,orderedQty);
+
+    return{
+      kind,id,name:x.name,neededQty:needed,
+      baseQty:plannedMin,packs:1,orderedQty,cost,missing:false,
+      orderMode:setSize>1?'unit-set':'unit'
+    }
+  }
+
   const baseQty=Math.max(.001,supplierQtyBase(s)),
-    packs=Math.max(1,Math.ceil(Math.max(.001,neededQty)/baseQty)),
+    packs=Math.max(1,Math.ceil(needed/baseQty-1e-9)),
     orderedQty=packs*baseQty,
-    cost=packs*supplierOrderCost(s);
-  return{kind,id,name:x.name,neededQty,baseQty,packs,orderedQty,cost,missing:false}
+    cost=salesGrowthOrderCostForQty(s,orderedQty);
+
+  return{kind,id,name:x.name,neededQty:needed,baseQty,packs,orderedQty,cost,missing:false,orderMode:'package'}
 }
 function salesGrowthInitialPurchase(b){
   const lines=salesGrowthBatchNeeds(b).map(n=>salesGrowthOrderForNeed(n.kind,n.id,n.qty));
@@ -513,19 +556,34 @@ function renderSalesGrowthSimulation(){
   salesGrowthAddStock(stock,sourcePurchase);
 
   const stageResults=[];
-  const MAX_SALES=100000;
+  const MAX_SALES=10000;
+  let stopReason='';
 
+  const cashCheckpoints=[];
   function oneSale(){
-    if(totalSales>=MAX_SALES)return false;
+    if(totalSales>=MAX_SALES){stopReason='Sicherheitsgrenze erreicht';return false}
     const b=active[rr%active.length];rr++;
     const ensure=salesGrowthEnsureForSale(b,stock,cash,reorders,totalSales+1);
-    if(!ensure.ok)return false;
+    if(!ensure.ok){stopReason='Mindestens eine notwendige Nachbestellung kann nicht berechnet werden';return false}
     cash=ensure.cash;
     salesGrowthConsumeSale(b,stock);
     cash+=salesGrowthNonMaterialCashPerSale(b);
     totalSales++;
     counts.set(b.key,(counts.get(b.key)||0)+1);
     if(sourceBreakEvenAt===null&&cash>=0)sourceBreakEvenAt={totalSales,counts:Object.fromEntries(counts),cash};
+
+    // Detect a genuinely negative long-run cash-flow instead of looping to 100,000.
+    if(totalSales%100===0){
+      cashCheckpoints.push({sales:totalSales,cash});
+      if(!sourceBreakEvenAt&&cashCheckpoints.length>=4){
+        const recent=cashCheckpoints.slice(-4);
+        const strictlyDown=recent.every((x,i)=>i===0||x.cash<recent[i-1].cash-1);
+        if(strictlyDown&&cash<-sourcePurchase.total*2){
+          stopReason='Cashflow bleibt trotz Verkäufen negativ – Nachbestellkosten übersteigen den erwirtschafteten freien Cashflow';
+          return false
+        }
+      }
+    }
     return true
   }
 
@@ -608,11 +666,12 @@ function renderSalesGrowthSimulation(){
   el.innerHTML=`<div class="sales-chain-summary">
     <div class="production-kpi"><div class="label">Start-Investition</div><div class="value">${euro(sourcePurchase.total)}</div></div>
     <div class="production-kpi"><div class="label">Start-Batch amortisiert</div><div class="value">${sourceBreakEvenAt?sourceBreakEvenAt.totalSales+' Verkäufe':'nicht erreicht'}</div></div>
-    <div class="production-kpi"><div class="label">Gesamtverkäufe simuliert</div><div class="value">${totalSales}</div></div>
-    <div class="production-kpi"><div class="label">Freies Geld am Ende</div><div class="value">${euro(cash)}</div></div>
+    <div class="production-kpi"><div class="label">Gesamtverkäufe simuliert</div><div class="value">${totalSales}</div><div class="tiny">${stopReason&&!sourceBreakEvenAt?esc(stopReason):'Simulation bis zum relevanten Ziel'}</div></div>
+    <div class="production-kpi"><div class="label">Freies Geld am Ende</div><div class="value ${cash>=0?'positive':'negative'}">${euro(cash)}</div></div>
     <div class="production-kpi"><div class="label">Nachbestellungen gesamt</div><div class="value">${reorders.length}</div><div class="tiny">davon ${sourceReorders.length} bis Start-Amortisation</div></div>
   </div>
 
+  ${!sourceBreakEvenAt&&stopReason?`<div class="hint negative" style="margin-bottom:10px"><strong>Simulation gestoppt:</strong> ${esc(stopReason)}. Die Simulation läuft nicht mehr blind bis 100.000 Verkäufe weiter. Prüfe bei den betroffenen Artikeln aktive Bestellmenge, Preis, Versand und Set/MOQ.</div>`:''}
   <div class="sales-chain-stage done">
     <div class="sales-chain-stage-head"><div><div class="sales-chain-stage-title">Start · ${esc(source.bid)} · ${esc(source.name)}</div><div class="tiny">1. AK und Amortisation</div></div><span class="badge ready">${sourceBreakEvenAt?'amortisiert':'offen'}</span></div>
     <div class="sales-chain-kpis">

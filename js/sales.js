@@ -88,16 +88,36 @@ function realSaleVariantsForBatch(b){
   return batchSaleVariants(b).map(v=>({color:v.name,capacity:stockCapacityForVariant(b,v.name)}))
 }
 
+function setAllRestStockBatches(open){
+  $$('#realStockSalesSimulation details.real-sales-batch-group').forEach(d=>d.open=!!open)
+}
 function renderRealStockSalesSimulation(){
   const el=$('#realStockSalesSimulation');if(!el)return;
   ensureSalesData();
-  const cards=[];
-  (state.batches||[]).forEach(b=>realSaleVariantsForBatch(b).forEach(v=>cards.push({b,...v})));
-  cards.sort((a,b)=>b.capacity-a.capacity||String(a.b.bid).localeCompare(String(b.b.bid),'de',{numeric:true}));
-  el.innerHTML=`<div class="real-sales-grid">${cards.map(x=>`<div class="real-sales-card ${x.capacity?'':'blocked'}">
-    <div class="variant"><div><strong>${esc(x.b.bid)} · ${esc(x.b.name)}</strong><div class="tiny">${x.color?warehouseColorChip(x.color):'Ohne feste Farbvariante'}</div></div><div class="capacity">${x.capacity}×</div></div>
-    <div class="tiny" style="margin-top:6px">${x.capacity?`Mit dem jetzigen echten Lager noch ${x.capacity} vollständige Verkäufe möglich.`:'Mindestens eine benötigte PID/VID fehlt.'}</div>
-  </div>`).join('')}</div>`
+
+  const groups=(state.batches||[]).map(b=>{
+    const variants=realSaleVariantsForBatch(b)
+      .sort((a,z)=>z.capacity-a.capacity||String(a.color||'').localeCompare(String(z.color||''),'de'));
+    return{
+      b,variants,
+      maxCapacity:variants.length?Math.max(...variants.map(v=>v.capacity)):0,
+      sellable:variants.filter(v=>v.capacity>0).length
+    }
+  }).sort((a,z)=>z.maxCapacity-a.maxCapacity||String(a.b.bid).localeCompare(String(z.b.bid),'de',{numeric:true}));
+
+  el.innerHTML=`<div class="real-sales-batch-list">${groups.map(g=>`
+    <details class="real-sales-batch-group" data-batch-key="${esc(g.b.key)}" open>
+      <summary>
+        <span><strong>${esc(g.b.bid)} · ${esc(g.b.name)}</strong><span class="tiny"> · ${g.sellable}/${g.variants.length} Varianten lieferbar</span></span>
+        <span class="badge ${g.maxCapacity>0?'ready':''}">max. ${g.maxCapacity}×</span>
+      </summary>
+      <div class="real-sales-grid compact">
+        ${g.variants.map(v=>`<div class="real-sales-card ${v.capacity?'':'blocked'}">
+          <div class="variant"><div><strong>${v.color?warehouseColorChip(v.color):'Ohne feste Farbvariante'}</strong></div><div class="capacity">${v.capacity}×</div></div>
+          <div class="tiny" style="margin-top:6px">${v.capacity?`Mit dem jetzigen echten Lager noch ${v.capacity} vollständige Verkäufe möglich.`:'Mindestens eine benötigte PID/VID fehlt.'}</div>
+        </div>`).join('')||'<div class="tiny">Keine Verkaufsvarianten angelegt.</div>'}
+      </div>
+    </details>`).join('')}</div>`
 }
 function renderSalesHistory(){
   const el=$('#salesHistoryTable');if(!el)return;
@@ -113,7 +133,10 @@ function bindSalesUi(){
   const b=$('#saleBatchSelect');if(!b)return;
   b.onchange=()=>{const batch=state.batches.find(x=>x.key===b.value);if(batch)$('#saleActualPrice').value=num(batch.salePrice).toFixed(2);saleColorOptions();renderSaleAvailability()};
   $('#saleColorSelect').onchange=renderSaleAvailability;$('#saleQty').oninput=renderSaleAvailability;
-  $('#saleBookBtn').onclick=bookRealSale;$('#saleSimulationRefreshBtn').onclick=renderRealStockSalesSimulation
+  $('#saleBookBtn').onclick=bookRealSale;$('#saleSimulationRefreshBtn').onclick=renderRealStockSalesSimulation;
+  const collapse=$('#saleSimulationCollapseAllBtn'),expand=$('#saleSimulationExpandAllBtn');
+  if(collapse)collapse.onclick=()=>setAllRestStockBatches(false);
+  if(expand)expand.onclick=()=>setAllRestStockBatches(true)
 }
 
 
