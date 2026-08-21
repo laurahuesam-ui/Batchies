@@ -269,15 +269,91 @@ function planningStrategicQuantities(s,requiredQty){
   return [...candidates].sort((a,b)=>a-b)
 }
 function planningOrderComparison(s,requiredQty){
-  if(!s||s.priceType==='set'||s.priceType==='consumable')return [];
-  const required=Math.max(Math.max(1,num(s.minOrderQty,1)),Math.ceil(num(requiredQty,0)));
-  return planningStrategicQuantities(s,required).map(q=>{
-    const shipping=planningShippingForQty(s,q),
+  if(!s)return [];
+
+  const demand=Math.max(0,num(requiredQty)),
+    rows=[],
+    seen=new Set();
+
+  function add(q,source,label=''){
+    q=Math.max(.001,num(q));
+    if(q<=0)return;
+    const key=Math.round(q*1000000)/1000000;
+    if(seen.has(key))return;
+    seen.add(key);
+
+    const shipping=typeof planningShippingForQty==='function'
+      ? planningShippingForQty(s,q)
+      : supplierShippingForQty(s,q),
       cost=planningSupplierOrderCostForQty(s,q),
-      unit=cost/q,
-      goods=supplierTierUnitPrice(s,q)*q;
-    return{qty:q,goods,shipping:shipping.shipping,shippingSource:shipping.source||'',cost,unit,isRequired:q===required}
-  }).sort((a,b)=>a.qty-b.qty)
+      unit=q>0?cost/q:0,
+      goods=Math.max(0,cost-shipping.shipping);
+
+    rows.push({qty:q,goods,shipping:shipping.shipping,shippingSource:shipping.source||'',cost,unit,source,label})
+  }
+
+  if(s.priceType==='set'||s.priceType==='consumable'){
+    // True packages are indivisible. Show alternatives only when there is
+    // something meaningful to compare (e.g. one vs several packs or measured
+    // shipping/price points).
+    const pack=Math.max(.001,supplierQtyBase(s)),
+      packsNeeded=Math.max(1,Math.ceil(demand/pack-1e-9)),
+      required=packsNeeded*pack;
+    add(required,'required','Bedarf / kleinste mögliche Bestellung');
+
+    const rawPoints=[
+      ...(s.shippingPoints||[]).map(x=>supplierRawQtyToPieces(s,Math.max(1,num(x.qty,1)))),
+      ...(s.priceTiers||[]).map(x=>supplierRawQtyToPieces(s,Math.max(1,num(x.minQty,1))))
+    ].filter(q=>q>required+1e-9)
+     .sort((a,b)=>a-b);
+
+    rawPoints.slice(0,3).forEach(q=>add(q,'breakpoint','Staffel-/Versandpunkt'));
+
+    // If no explicit points exist, a second package is only useful as a
+    // comparison for small package sizes; avoid clutter for huge fixed packs.
+    if(rows.length===1&&pack<=25)add(required+pack,'package','2. Packung/Set');
+  }else{
+    const setSize=Math.max(1,supplierUnitSetSize(s)),
+      moq=Math.max(setSize,supplierQtyBase(s)),
+      demandRounded=supplierRawQtyToPieces(s,Math.max(1,supplierPiecesToRawQty(s,Math.max(demand,1)))),
+      minimum=Math.max(moq,demandRounded),
+      active=Math.max(moq,supplierCalcQty(s));
+
+    // Always include what is actually needed/MOQ.
+    add(minimum,'required','Bedarf / MOQ');
+
+    // Active selected row is a separate planning choice and must be visible,
+    // rather than silently replacing the real required quantity.
+    if(active>minimum+1e-9)add(active,'active','Aktive Kalkulationsbasis');
+
+    const sensibleCap=minimum+Math.max(10,Math.ceil(minimum*.50)),
+      points=[];
+
+    (s.shippingPoints||[]).forEach(p=>{
+      const q=supplierRawQtyToPieces(s,Math.max(1,num(p.qty,1)));
+      if(q>minimum+1e-9&&q<=sensibleCap)points.push({q,source:'shipping',label:'Versandpunkt'})
+    });
+    (s.priceTiers||[]).forEach(t=>{
+      const q=supplierRawQtyToPieces(s,Math.max(1,num(t.minQty,1)));
+      if(q>minimum+1e-9&&q<=sensibleCap)points.push({q,source:'tier',label:'Preisstaffel'})
+    });
+
+    points.sort((a,b)=>a.q-b.q);
+    points.slice(0,4).forEach(x=>add(x.q,x.source,x.label));
+
+    // If active quantity is far away, still show only it + actual requirement,
+    // not dozens of irrelevant distant tiers.
+  }
+
+  rows.sort((a,b)=>a.qty-b.qty);
+  if(rows.length<2)return [];
+
+  // Mark the actual need and currently active planned quantity separately.
+  rows.forEach(r=>{
+    r.isRequired=r.source==='required';
+    r.isActive=r.source==='active' || Math.abs(r.qty-supplierCalcQty(s))<1e-9
+  });
+  return rows
 }
 function planningOptimizePieceOrder(kind,id,totalShort,s){
   if(totalShort<=1e-9||!s)return{ordered:0,cost:0,moq:0,required:0,recommended:false};
@@ -550,9 +626,9 @@ function calcPurchasePlan(useStock=true){
       }else{
         const o=planningPieceOrder(g.kind,g.id,totalShort,s);
         ordered=o.ordered;cost=o.cost;moq=o.moq;
-        g.orderOptimization=o;
-        g.orderComparison=planningOrderComparison(s,totalShort)
+        g.orderOptimization=o
       }
+      g.orderComparison=planningOrderComparison(s,totalShort)
     }
 
     const arrivals={};
@@ -635,9 +711,9 @@ function renderPurchaseCalc(){
       ${valueHint?`<div class="tiny" style="margin-top:5px"><strong>Sinnvolle Alternative:</strong> ${valueHint}</div>`:''}
       ${g.orderComparison?.length>1?`<details class="order-comparison" style="margin-top:6px" ${g.id==='PID-0003'?'open':''}>
         <summary>Sinnvolle Bestellmengen vergleichen (${g.orderComparison.length})</summary>
-        <div class="table-wrap"><table class="order-comparison-table"><thead><tr><th>Menge</th><th>Ware</th><th>Versand inkl. ggf. Zollabw.</th><th>Gesamt</th><th>€/Stk.</th></tr></thead><tbody>
-        ${g.orderComparison.map(q=>`<tr class="${q.isRequired?'comparison-required':''}"><td>${q.qty}${q.isRequired?' · aktuelle Planbasis':''}</td><td>${euro(q.goods)}</td><td>${euro(q.shipping)}<div class="tiny">${esc(q.shippingSource)}</div></td><td><strong>${euro(q.cost)}</strong></td><td>${euro(q.unit)}</td></tr>`).join('')}
-        </tbody></table></div>
+        <div class="table-wrap"><table class="order-comparison-table"><thead><tr><th>Menge</th><th>Grund</th><th>Ware*</th><th>Versand</th><th>Gesamt</th><th>€/Stk.</th></tr></thead><tbody>
+        ${g.orderComparison.map(q=>`<tr class="${q.isRequired?'comparison-required':''}"><td><strong>${Number.isInteger(q.qty)?q.qty:q.qty.toFixed(2)}</strong>${q.isActive?' · aktiv':''}</td><td>${esc(q.label||'Alternative')}</td><td>${euro(q.goods)}</td><td>${euro(q.shipping)}<div class="tiny">${esc(q.shippingSource)}</div></td><td><strong>${euro(q.cost)}</strong></td><td>${euro(q.unit)}</td></tr>`).join('')}
+        </tbody></table></div><div class="tiny">*Ware ist die Vergleichskomponente ohne den separat ausgewiesenen Versand; Gesamt berücksichtigt die vollständige aktuelle Kostenlogik.</div>
       </details>`:''}
     </div>`
   }).join('');
