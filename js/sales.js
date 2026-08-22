@@ -13,9 +13,9 @@ function inventoryLotsForRequirement(kind,id,color){
   return [...exact,...neutral]
 }
 function saleRequirements(b,variantName,qty){
-  const variant=selectedBatchSaleVariant(b,variantName),pc=variant?.productColors||{},req=[];
+  const variant=selectedBatchSaleVariant(b,variantName),pc=variant?.productColors||{},vc=variant?.packagingColors||{},req=[];
   (b.items||[]).forEach(i=>req.push({kind:'PID',id:i.pid,need:Math.max(1,num(i.qty,1))*qty,color:pc[i.pid]||''}));
-  (b.packagingItems||[]).forEach(i=>req.push({kind:'VID',id:i.vid,need:Math.max(.001,num(i.qty,1))*qty,color:''}));
+  (b.packagingItems||[]).forEach(i=>req.push({kind:'VID',id:i.vid,need:Math.max(.001,num(i.qty,1))*qty,color:vc[i.vid]||''}));
   return req
 }
 

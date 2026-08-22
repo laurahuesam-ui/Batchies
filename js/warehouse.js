@@ -16,7 +16,7 @@ function warehouseUnitLabel(kind,id){
 }
 function warehouseColorOptionsFor(kind,id,includeAll=true){
   const obj=warehouseItemObject(kind,id);
-  const defined=kind==='PID'?normalizeProductColors(obj?.colors):[];
+  const defined=normalizeProductColors(obj?.colors);
   const stockColors=[...new Set((state.realWarehouse||[]).filter(x=>x.kind===kind&&x.itemId===id&&x.color).map(x=>x.color))];
   const list=[...new Set([...defined,...stockColors])];
   return includeAll?['',...list]:list
@@ -89,7 +89,7 @@ function warehouseFillItemOptions(selected=''){
 function warehouseFillColorOptions(selected=null){
   const el=$('#warehouseColor');if(!el)return;
   const kind=$('#warehouseKind')?.value==='VID'?'VID':'PID',id=$('#warehouseItem')?.value||'';
-  const defined=kind==='PID'?normalizeProductColors(warehouseItemObject(kind,id)?.colors):[];
+  const defined=normalizeProductColors(warehouseItemObject(kind,id)?.colors);
   const all=defined.length?defined:PRODUCT_COLORS.map(c=>c.name);
   el.innerHTML='<option value="">Ohne Farbe</option>'+all.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
   if(selected!==null&&[...el.options].some(o=>o.value===selected))el.value=selected
