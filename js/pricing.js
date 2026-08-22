@@ -59,8 +59,9 @@ function supplierVatIncluded(s){return !!s?.vatIncluded}
 function supplierVatAddon(s,amount){return supplierVatIncluded(s)?0:Math.max(0,num(amount))*supplierVatRate(s)}
 function supplierHasCustoms(s){return !!s&&!!s.customs}
 function supplierCustomsCost(s){if(!supplierHasCustoms(s))return 0;const ship=supplierCalcShipping(s);if(ship.includesCustoms)return 0;return supplierBaseOrderCost(s)*0.12}
-function supplierPaymentFee(s){return Math.max(0,num(s?.paymentFee,0))}
-function supplierOrderCost(s){const subtotal=supplierBaseOrderCost(s)+supplierCustomsCost(s),vat=supplierVatAddon(s,subtotal);return subtotal+vat+supplierPaymentFee(s)}
+function supplierPaymentFeeRate(s){return Math.max(0,num(s?.paymentFeePct,0))/100}
+function supplierPaymentFee(s,amountAfterVat=null){const base=amountAfterVat===null?(()=>{const subtotal=supplierBaseOrderCost(s)+supplierCustomsCost(s),vat=supplierVatAddon(s,subtotal);return subtotal+vat})():Math.max(0,num(amountAfterVat));return base*supplierPaymentFeeRate(s)}
+function supplierOrderCost(s){const subtotal=supplierBaseOrderCost(s)+supplierCustomsCost(s),vat=supplierVatAddon(s,subtotal),afterVat=subtotal+vat;return afterVat+supplierPaymentFee(s,afterVat)}
 function supplierLandedUnitCost(s){return s?supplierOrderCost(s)/supplierCalcQty(s):0}
 function productInboundShipping(p){const s=(p.suppliers||[]).find(x=>x.preferred)||(p.suppliers||[])[0];if(!s)return 0;const ship=supplierUnitShipping(s),customs=supplierHasCustoms(s)?(num(p.basePrice)+ship)*0.12:0,subtotal=num(p.basePrice)+ship+customs,vat=supplierVatAddon(s,subtotal);return ship+customs+vat}
 function productPurchaseCost(p){return num(p.basePrice)+productInboundShipping(p)+(p.costs||[]).reduce((a,c)=>a+num(c.amount),0)}

@@ -226,8 +226,8 @@ function planningSupplierOrderCostForQty(s,qty){
     base=goods+ship.shipping,
     customs=(s.customs&&!ship.includesCustoms)?base*.12:0,
     subtotal=base+customs,
-    vat=supplierVatAddon(s,subtotal);
-  return subtotal+vat+supplierPaymentFee(s)
+    vat=supplierVatAddon(s,subtotal),afterVat=subtotal+vat;
+  return afterVat+supplierPaymentFee(s,afterVat)
 }
 function planningStrategicQuantities(s,requiredQty){
   const required=Math.max(1,Math.ceil(num(requiredQty,1))),
@@ -463,8 +463,8 @@ function planningOrderQuote(kind,id,requiredQty){
       baseCost=goods+ship.shipping,
       customs=(supplierHasCustoms(s)&&!ship.includesCustoms)?baseCost*.12:0,
       subtotal=baseCost+customs,
-      vat=supplierVatAddon(s,subtotal);
-    return{minQty,orderedQty,cost:subtotal+vat,orderUnits:orderedQty,isDiscretePack:false,missing:false}
+      vat=supplierVatAddon(s,subtotal),afterVat=subtotal+vat;
+    return{minQty,orderedQty,cost:afterVat+supplierPaymentFee(s,afterVat),orderUnits:orderedQty,isDiscretePack:false,missing:false}
   }
 
   // Sets / consumables remain physically indivisible packages.
