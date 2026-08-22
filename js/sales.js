@@ -864,7 +864,7 @@ function renderForecastReorderTable(){
 function estimatedSaleCashContribution(b,variant,actualPrice=null){
   const price=actualPrice===null?num(b.salePrice):num(actualPrice),c=batchCalc({...b,salePrice:price});
   // material cash is handled via real/simulated purchases; retain platform + labor etc.
-  return price-c.fees-c.laborCost-c.outboundShipping-c.adCost-c.riskCost-c.fixedAllocation
+  return price-c.fees-c.laborCost-c.outboundShipping-c.adCost-c.riskCost-c.returnsCost-c.discountCost-c.postTripCost-c.fixedAllocation
 }
 function actualRecoveredCash(){
   return (state.salesHistory||[]).reduce((sum,s)=>{

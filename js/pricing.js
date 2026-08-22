@@ -98,18 +98,19 @@ function batchCalc(b,overridePrice=null){
     laborCost=Math.max(0,num(b.laborMinutes))*Math.max(0,num(b.hourlyRate))/60,
     outboundShipping=Math.max(0,num(b.outboundShipping)),adCost=Math.max(0,num(b.adCost)),
     riskCost=materialCost*Math.max(0,num(b.riskPct))/100,
+    returnsCost=revenue*Math.max(0,num(b.returnsPct))/100,discountCost=revenue*Math.max(0,num(b.discountPct))/100,
     postTripDistanceOneWay=5,postTripKmCost=.30,postTripShare=Math.max(0,num(b.postTripShare,1)),
     postTripCost=postTripDistanceOneWay*2*postTripKmCost*postTripShare,
     fixedAllocation=Math.max(0,num(b.fixedAllocation)),
-    db1=revenue-materialCost-fees,db2=db1-laborCost-outboundShipping-adCost-riskCost-postTripCost,
+    db1=revenue-materialCost-fees,db2=db1-laborCost-outboundShipping-adCost-riskCost-returnsCost-discountCost-postTripCost,
     profit=db2-fixedAllocation,margin=revenue>0?profit/revenue*100:0,
     vatMult=1+state.settings.feeVatPct/100,eVar=rate*vatMult,eFixed=baseFee*vatMult,
-    nonPlatformCosts=materialCost+laborCost+outboundShipping+adCost+riskCost+postTripCost+fixedAllocation,
+    nonPlatformCosts=materialCost+laborCost+outboundShipping+adCost+riskCost+returnsCost+discountCost+postTripCost+fixedAllocation,
     target=batchTargetProfitRecommendation(b,nonPlatformCosts,eVar,eFixed);
   let recommended=Math.ceil((Math.max(0,target.recommended)-1e-9)*10)/10;
   // Nach Rundung Zielgewinn auf Basis des endgültigen empfohlenen VK anzeigen.
   const targetProfit=target.targetMode==='auto'?Math.max(2.5,recommended*.25):target.targetProfit;
   return{productCost,packagingCost,extra:packagingCost,total:materialCost,costs:materialCost,
-    price,revenue,fees,laborCost,outboundShipping,adCost,riskCost,postTripDistanceOneWay,postTripKmCost,postTripShare,postTripCost,fixedAllocation,db1,db2,profit,margin,
+    price,revenue,fees,laborCost,outboundShipping,adCost,riskCost,returnsCost,discountCost,postTripDistanceOneWay,postTripKmCost,postTripShare,postTripCost,fixedAllocation,db1,db2,profit,margin,
     recommended,targetProfit,targetMode:target.targetMode,targetLabel:target.targetLabel||'eigener Zielgewinn'}
 }

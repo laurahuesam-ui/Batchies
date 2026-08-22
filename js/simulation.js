@@ -377,7 +377,7 @@ function salesGrowthNonMaterialCashPerSale(b){
   // Actual cash-flow view:
   // material is handled discretely via stock/reorders below.
   // Sale contributes revenue minus platform fees and the other per-sale costs.
-  return c.revenue-c.fees-c.laborCost-c.outboundShipping-c.adCost-c.riskCost-c.fixedAllocation
+  return c.revenue-c.fees-c.laborCost-c.outboundShipping-c.adCost-c.riskCost-c.returnsCost-c.discountCost-c.postTripCost-c.fixedAllocation
 }
 function salesGrowthCheapestTarget(excludeKeys=new Set()){
   const candidates=salesGrowthBatches()

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="theme-color" content="#24513b">
 <meta name="description" content="Batchies – Produkt- und Batchentwicklung, Lieferantenvergleich und Etsy-Preiskalkulation.">
-<link rel="manifest" href="manifest.webmanifest?v=3.6.4">
+<link rel="manifest" href="manifest.webmanifest?v=3.6.5">
 <link rel="icon" href="icon-192.png">
 <link rel="apple-touch-icon" href="icon-192.png">
 <title>Batchies – Produktentwicklung</title>
@@ -236,7 +236,7 @@
 <body>
 <div class="app">
 <header class="topbar">
-  <div class="brand"><div class="logo">B</div><div><h1>Batchies</h1><div class="subtitle">Produktentwicklung & Stammdaten · v3.6.4</div></div></div>
+  <div class="brand"><div class="logo">B</div><div><h1>Batchies</h1><div class="subtitle">Produktentwicklung & Stammdaten · v3.6.5</div></div></div>
   <div class="actions"><button class="btn" id="exportBackupBtn">Backup</button><button class="btn" id="importBackupBtn">Import</button><button class="btn primary" id="addProductBtn">+ Produkt</button><button class="btn primary" id="addBatchBtn">+ Batch</button><input type="file" id="backupFile" accept="application/json" hidden></div>
 </header>
 <nav class="tabs"><button class="tab active" data-tab="overview">Übersicht</button><button class="tab" data-tab="products">Produkte</button><button class="tab" data-tab="packaging">Verpackung</button><button class="tab" data-tab="batches">Batches</button><button class="tab" data-tab="warehouse">Lager</button><button class="tab" data-tab="sales">Verkäufe</button><button class="tab" data-tab="fees">Gebühren & Kalkulation</button><button class="tab" data-tab="investments">Investitionen</button><button class="tab" data-tab="simulation">Einkaufs-Simulation</button><button class="tab" data-tab="data">Stammdaten & CSV</button></nav>
@@ -452,7 +452,7 @@
 <button type="button" class="btn" id="addBatchVariantBtn">+ Verkaufsvariante</button>
 <h3 class="section-title" style="margin-top:18px">Verpackung</h3><div class="tiny" style="margin-bottom:6px">VID · Menge · EK dieser Verpackungsposition</div><div id="batchPackagingRows"></div><button type="button" class="btn" id="addBatchPackagingBtn">+ Verpackung hinzufügen</button>
 <div class="grid" style="margin-top:14px">
-<div class="calcbox span6"><div class="calcrow"><span>Produkt-EK inkl. Lieferantenversand</span><strong id="batchProductsCost">0,00 €</strong></div><div class="calcrow"><span>Verpackungs-EK (VID)</span><strong id="batchPackagingCostLive">0,00 €</strong></div><div class="calcrow total"><span>Material-EK gesamt</span><strong id="batchTotalCost">0,00 €</strong></div><div class="calcrow"><span>Etsy-Gebühren bei aktuellem VK</span><strong id="batchFeesLive">0,00 €</strong></div><div class="calcrow"><span>DB I</span><strong id="batchDb1Live">0,00 €</strong></div><div class="calcrow"><span>Arbeitskosten</span><strong id="batchLaborCostLive">0,00 €</strong></div><div class="calcrow"><span>Kundenversand (von dir getragen)</span><strong id="batchOutboundShippingLive">0,00 €</strong></div><div class="calcrow"><span>Werbung + Risikopuffer</span><strong id="batchRiskAdsLive">0,00 €</strong></div><div class="calcrow"><span>Postfahrt (5 km einfach)</span><strong id="batchPostTripCostLive">3,00 €</strong></div><div class="calcrow"><span>DB II</span><strong id="batchDb2Live">0,00 €</strong></div><div class="calcrow"><span>Fixkosten-Umlage</span><strong id="batchFixedAllocationLive">0,00 €</strong></div><div class="calcrow"><span>Kalkulatorischer Gewinn</span><strong id="batchProfitLive">0,00 €</strong></div><div class="calcrow"><span>Ist-Marge</span><strong id="batchMarginLive">0,0 %</strong></div><div class="calcrow total"><span>Empfohlener VK</span><strong class="positive" id="batchRecommended">0,00 €</strong></div></div>
+<div class="calcbox span6"><div class="calcrow"><span>Produkt-EK inkl. Lieferantenversand</span><strong id="batchProductsCost">0,00 €</strong></div><div class="calcrow"><span>Verpackungs-EK (VID)</span><strong id="batchPackagingCostLive">0,00 €</strong></div><div class="calcrow total"><span>Material-EK gesamt</span><strong id="batchTotalCost">0,00 €</strong></div><div class="calcrow"><span>Etsy-Gebühren bei aktuellem VK</span><strong id="batchFeesLive">0,00 €</strong></div><div class="calcrow"><span>DB I</span><strong id="batchDb1Live">0,00 €</strong></div><div class="calcrow"><span>Arbeitskosten</span><strong id="batchLaborCostLive">0,00 €</strong></div><div class="calcrow"><span>Kundenversand (von dir getragen)</span><strong id="batchOutboundShippingLive">0,00 €</strong></div><div class="calcrow"><span>Werbung + Risikopuffer</span><strong id="batchRiskAdsLive">0,00 €</strong></div><div class="calcrow"><span>Retouren/Erstattungen</span><strong id="batchReturnsCostLive">0,00 €</strong></div><div class="calcrow"><span>Rabatte/Gutscheine</span><strong id="batchDiscountCostLive">0,00 €</strong></div><div class="calcrow"><span>Postfahrt (5 km einfach)</span><strong id="batchPostTripCostLive">3,00 €</strong></div><div class="calcrow"><span>DB II</span><strong id="batchDb2Live">0,00 €</strong></div><div class="calcrow"><span>Fixkosten-Umlage</span><strong id="batchFixedAllocationLive">0,00 €</strong></div><div class="calcrow"><span>Kalkulatorischer Gewinn</span><strong id="batchProfitLive">0,00 €</strong></div><div class="calcrow"><span>Ist-Marge</span><strong id="batchMarginLive">0,0 %</strong></div><div class="calcrow total"><span>Empfohlener VK</span><strong class="positive" id="batchRecommended">0,00 €</strong></div></div>
 <div class="span6"><div class="field"><label>Zielgewinn pro Batch (€)</label><div class="inline"><input id="batchTargetProfit" type="number" min="0" step="0.50" value="5"><label class="nowrap" style="display:flex;align-items:center;gap:6px"><input class="switch" id="batchAutoTargetProfit" type="checkbox" checked> automatisch</label></div><div class="tiny" id="batchTargetProfitHint">Automatische Staffel: bis 20 € VK → 5 € · bis 40 € → 10 € · bis 50 € → 15 € · bis 75 € → 20 € · über 75 € → 25 % des VK.</div></div><div class="field"><label>Verkaufspreis Batch (€)</label><div class="inline"><input id="batchSalePrice" type="number" min="0" step="0.01" value="0"><button type="button" class="btn secondary nowrap" id="batchUseRecommendedBtn">Empfehlung übernehmen</button></div></div><div class="info">Der empfohlene VK deckt Material, Etsy-Gebühren, Arbeitsentlohnung, Kundenversand, Werbung/Risiko und Fixkosten-Umlage und enthält zusätzlich den Zielgewinn. Die Etsy-Gebühren werden nur einmal auf den gesamten Batch-VK gerechnet.</div>
 <div class="batch-profit-projection" style="margin-top:12px">
   <div class="toolbar compact" style="margin-bottom:8px">
@@ -469,10 +469,12 @@
   <div class="field col3"><label>Kundenversand für dich (€)</label><input id="batchOutboundShipping" type="number" min="0" step="0.01" value="0"></div>
   <div class="field col3"><label>Sonstige Werbung/Batch (€)</label><input id="batchAdCost" type="number" min="0" step="0.01" value="0"></div>
   <div class="field col3"><label>Risiko/Ausschuss (%)</label><input id="batchRiskPct" type="number" min="0" max="100" step="0.5" value="0"></div>
+  <div class="field col3"><label>Retouren/Erstattungen (%)</label><input id="batchReturnsPct" type="number" min="0" max="100" step="0.5" value="0"><div class="tiny">Erwarteter durchschnittlicher Kostenpuffer bezogen auf den VK.</div></div>
+  <div class="field col3"><label>Rabatte/Gutscheine (%)</label><input id="batchDiscountPct" type="number" min="0" max="100" step="0.5" value="0"><div class="tiny">Durchschnittlich erwarteter Preisnachlass bezogen auf den VK.</div></div>
   <div class="field col3"><label>Postfahrt-Anteil/Batch</label><input id="batchPostTripShare" type="number" min="0" step="0.1" value="1"><div class="tiny">Pauschale: 5 km einfach × 2 × 0,30 €/km = 3,00 € je Fahrt. 1 = 1 Paket/Fahrt · 0,5 = 2 Pakete/Fahrt · 0,2 = 5 Pakete/Fahrt.</div></div>
   <div class="field col3"><label>Fixkosten-Umlage/Batch (€)</label><input id="batchFixedAllocation" type="number" min="0" step="0.01" value="0"></div>
 </div>
-<div class="tiny">DB I = VK − Material − Etsy-Gebühren. DB II zieht zusätzlich Arbeitszeit, von dir getragenen Kundenversand, sonstige Werbung, Risikopuffer und die Postfahrt ab. Postfahrt pauschal mit 5 km einfacher Strecke und 0,30 €/km; der Fahrtanteil verteilt eine Fahrt auf mehrere Pakete. Der kalkulatorische Gewinn zieht danach noch die Fixkosten-Umlage ab.</div>
+<div class="tiny">DB I = VK − Material − Etsy-Gebühren. DB II zieht zusätzlich Arbeitszeit, von dir getragenen Kundenversand, sonstige Werbung, Risikopuffer, Retouren/Erstattungen, Rabatte/Gutscheine und die Postfahrt ab. Postfahrt pauschal mit 5 km einfacher Strecke und 0,30 €/km; der Fahrtanteil verteilt eine Fahrt auf mehrere Pakete. Der kalkulatorische Gewinn zieht danach noch die Fixkosten-Umlage ab.</div>
 <div id="batchProductionPlan" class="production-plan"><div class="assistant-head"><div><h3 class="section-title" style="margin-bottom:2px">Herstellungsplanung</h3><div class="muted">Eine Mindestbestellung je bevorzugtem Lieferanten: Was kostet der erste Einkauf und wie viele vollständige Batches entstehen daraus?</div></div></div><div id="batchProductionContent"></div></div>
 <div id="batchAssistant" class="batch-assistant hidden"><div class="assistant-head"><div><h3 class="section-title" style="margin-bottom:2px">Batch-Assistent</h3><div class="muted">Analysiert diesen Batch nur anhand deiner vorhandenen Produkt-Stammdaten und bestehenden Batches.</div></div><span class="assistant-score" id="batchAssistantScore">0 %</span></div><div id="batchAssistantContent"></div></div><div class="field" style="margin-top:14px"><label>Notizen</label><textarea id="batchNotes" placeholder="Verpackung, Thema, Varianten, offene Punkte …"></textarea></div>
 <div class="modal-foot"><button type="button" class="btn danger hidden" id="deleteBatchBtn">Batch löschen</button><span style="flex:1"></span><button type="button" class="btn cancel-batch-dialog">Abbrechen</button><button type="submit" class="btn primary" value="save" id="saveBatchBtn">Speichern</button></div>
@@ -491,20 +493,20 @@
   <div class="modal-foot"><button type="button" class="btn danger hidden" id="deletePackagingBtn">Verpackungsmaterial löschen</button><span style="flex:1"></span><button type="button" class="btn cancel-packaging-dialog">Abbrechen</button><button type="submit" class="btn primary" value="save" id="savePackagingBtn">Speichern</button></div>
 </form></dialog>
 
-<script src="js/category-data.js?v=3.6.4"></script>
-<script src="js/recovery-data.js?v=3.6.4"></script>
-<script src="js/config.js?v=3.6.4"></script>
-<script src="js/colors.js?v=3.6.4"></script>
-<script src="js/core.js?v=3.6.4"></script>
-<script src="js/categories.js?v=3.6.4"></script>
-<script src="js/pricing.js?v=3.6.4"></script>
-<script src="js/products.js?v=3.6.4"></script>
-<script src="js/batches.js?v=3.6.4"></script>
-<script src="js/batch-suggestions.js?v=3.6.4"></script>
-<script src="js/exports.js?v=3.6.4"></script>
-<script src="js/simulation.js?v=3.6.4"></script>
-<script src="js/packaging.js?v=3.6.4"></script>
-<script src="js/warehouse.js?v=3.6.4"></script>
-<script src="js/sales.js?v=3.6.4"></script>
-<script src="js/app.js?v=3.6.4"></script>
+<script src="js/category-data.js?v=3.6.5"></script>
+<script src="js/recovery-data.js?v=3.6.5"></script>
+<script src="js/config.js?v=3.6.5"></script>
+<script src="js/colors.js?v=3.6.5"></script>
+<script src="js/core.js?v=3.6.5"></script>
+<script src="js/categories.js?v=3.6.5"></script>
+<script src="js/pricing.js?v=3.6.5"></script>
+<script src="js/products.js?v=3.6.5"></script>
+<script src="js/batches.js?v=3.6.5"></script>
+<script src="js/batch-suggestions.js?v=3.6.5"></script>
+<script src="js/exports.js?v=3.6.5"></script>
+<script src="js/simulation.js?v=3.6.5"></script>
+<script src="js/packaging.js?v=3.6.5"></script>
+<script src="js/warehouse.js?v=3.6.5"></script>
+<script src="js/sales.js?v=3.6.5"></script>
+<script src="js/app.js?v=3.6.5"></script>
 </body></html>

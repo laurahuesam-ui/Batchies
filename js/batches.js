@@ -285,6 +285,8 @@ function collectBatchDraft(){
     outboundShipping:num($('#batchOutboundShipping')?.value),
     adCost:num($('#batchAdCost')?.value),
     riskPct:num($('#batchRiskPct')?.value),
+    returnsPct:Math.max(0,num($('#batchReturnsPct')?.value)),
+    discountPct:Math.max(0,num($('#batchDiscountPct')?.value)),
     postTripShare:Math.max(0,num($('#batchPostTripShare')?.value,1)),
     fixedAllocation:num($('#batchFixedAllocation')?.value),
     notes:$('#batchNotes').value.trim()
@@ -333,6 +335,8 @@ function liveBatchCalc(){
   $('#batchLaborCostLive').textContent=euro(c.laborCost);
   $('#batchOutboundShippingLive').textContent=euro(c.outboundShipping);
   $('#batchRiskAdsLive').textContent=euro(c.adCost+c.riskCost);
+  $('#batchReturnsCostLive').textContent=euro(c.returnsCost);
+  $('#batchDiscountCostLive').textContent=euro(c.discountCost);
   $('#batchPostTripCostLive').textContent=euro(c.postTripCost);
   $('#batchDb2Live').textContent=euro(c.db2);
   $('#batchFixedAllocationLive').textContent=euro(c.fixedAllocation);
@@ -356,7 +360,7 @@ function openBatch(key=null){
   if(dlg.open)dlg.close();
   $('#batchItemRows').innerHTML='';
   $('#batchPackagingRows').innerHTML='';
-  $('#batchKey').value=b?.key||'';$('#batchBid').value=b?.bid||'';$('#batchBidLabel').textContent=b?.bid||'BID wird beim Speichern vergeben';$('#batchModalTitle').textContent=b?'Batch bearbeiten':'Neuer Batch';$('#batchName').value=b?.name||'';$('#batchStatus').value=b?.status||'idea';renderBatchItemRows(b?.items||[]);renderBatchPackagingRows(b?.packagingItems||[]);renderBatchVariants(b?.saleVariants||[]);$('#batchTargetProfit').value=b?.targetProfit??5;$('#batchAutoTargetProfit').checked=b?.autoTargetProfit!==false;$('#batchTargetProfit').disabled=$('#batchAutoTargetProfit').checked;$('#batchSalePrice').value=b?.salePrice??0;$('#batchUseOffsite').checked=!!b?.useOffsite;$('#batchUseCurrency').checked=!!b?.useCurrency;$('#batchUseSetup').checked=!!b?.useSetup;$('#batchLaborMinutes').value=b?.laborMinutes??0;$('#batchHourlyRate').value=b?.hourlyRate??0;$('#batchOutboundShipping').value=b?.outboundShipping??0;$('#batchAdCost').value=b?.adCost??0;$('#batchRiskPct').value=b?.riskPct??0;$('#batchPostTripShare').value=b?.postTripShare??1;$('#batchFixedAllocation').value=b?.fixedAllocation??0;$('#batchNotes').value=b?.notes||'';$('#deleteBatchBtn').classList.toggle('hidden',!b);
+  $('#batchKey').value=b?.key||'';$('#batchBid').value=b?.bid||'';$('#batchBidLabel').textContent=b?.bid||'BID wird beim Speichern vergeben';$('#batchModalTitle').textContent=b?'Batch bearbeiten':'Neuer Batch';$('#batchName').value=b?.name||'';$('#batchStatus').value=b?.status||'idea';renderBatchItemRows(b?.items||[]);renderBatchPackagingRows(b?.packagingItems||[]);renderBatchVariants(b?.saleVariants||[]);$('#batchTargetProfit').value=b?.targetProfit??5;$('#batchAutoTargetProfit').checked=b?.autoTargetProfit!==false;$('#batchTargetProfit').disabled=$('#batchAutoTargetProfit').checked;$('#batchSalePrice').value=b?.salePrice??0;$('#batchUseOffsite').checked=!!b?.useOffsite;$('#batchUseCurrency').checked=!!b?.useCurrency;$('#batchUseSetup').checked=!!b?.useSetup;$('#batchLaborMinutes').value=b?.laborMinutes??0;$('#batchHourlyRate').value=b?.hourlyRate??0;$('#batchOutboundShipping').value=b?.outboundShipping??0;$('#batchAdCost').value=b?.adCost??0;$('#batchRiskPct').value=b?.riskPct??0;$('#batchReturnsPct').value=b?.returnsPct??0;$('#batchDiscountPct').value=b?.discountPct??0;$('#batchPostTripShare').value=b?.postTripShare??1;$('#batchFixedAllocation').value=b?.fixedAllocation??0;$('#batchNotes').value=b?.notes||'';$('#deleteBatchBtn').classList.toggle('hidden',!b);
   liveBatchCalc();
   dlg.showModal();
   if(b&&typeof renderBatchAssistant==='function'){try{renderBatchAssistant(b)}catch(err){console.error('Batch-Assistent:',err)}}
