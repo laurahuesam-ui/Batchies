@@ -111,7 +111,11 @@ function renderOverviewLiveStats(){
     sales=overviewActualSalesStats(),
     reorder=overviewReorderRows(),
     variants=overviewSellableVariants(),
-    gross=sales.revenue-sales.cogs;
+    gross=sales.revenue-sales.cogs,
+    taxReserveRate=.25,
+    taxReserve=Math.max(0,sales.profit)*taxReserveRate,
+    profitAfterReserve=sales.profit-taxReserve,
+    operatingCosts=sales.fees+sales.labor+sales.outbound+sales.ads+sales.risk+sales.fixed;
 
   const reorderHtml=reorder.length
     ? reorder.slice(0,8).map(x=>`<div class="overview-alert-row">
@@ -132,18 +136,35 @@ function renderOverviewLiveStats(){
   el.innerHTML=`<div class="overview-live-kpis">
     <div class="overview-live-kpi"><div class="label">Echter Lagerwert</div><div class="value">${euro(stockValue)}</div><div class="sub">${lots} Lagerpositionen · ${stockUnits.toLocaleString('de-DE')} Einheiten</div></div>
     <div class="overview-live-kpi"><div class="label">Verkäufe gesamt</div><div class="value">${sales.count.toLocaleString('de-DE')}</div><div class="sub">${sales.orders} Buchungen · letzte 30 Tage: ${sales.last30.toLocaleString('de-DE')}</div></div>
-    <div class="overview-live-kpi"><div class="label">Echter Umsatz</div><div class="value">${euro(sales.revenue)}</div><div class="sub">aus gebuchten Verkäufen</div></div>
-    <div class="overview-live-kpi profit-kpi"><div class="label">Realisierter Gewinn</div><div class="value ${sales.profit>=0?'positive':'negative'}">${euro(sales.profit)}</div><div class="sub">nach echtem Waren-EK + Verkaufskosten</div></div>
-    <div class="overview-live-kpi"><div class="label">Gewinn letzte 30 Tage</div><div class="value ${sales.profit30>=0?'positive':'negative'}">${euro(sales.profit30)}</div><div class="sub">${sales.last30.toLocaleString('de-DE')} verkaufte Batches</div></div>
-    <div class="overview-live-kpi"><div class="label">Ø Gewinn / Batch</div><div class="value ${sales.avgProfit>=0?'positive':'negative'}">${euro(sales.avgProfit)}</div><div class="sub">realisierter Durchschnitt</div></div>
-    <div class="overview-live-kpi"><div class="label">Entnommener Warenwert</div><div class="value">${euro(sales.cogs)}</div><div class="sub">tatsächliche Lager-EK der Verkäufe</div></div>
-    <div class="overview-live-kpi"><div class="label">Umsatz − Warenwert</div><div class="value ${gross>=0?'positive':'negative'}">${euro(gross)}</div><div class="sub">vor Etsy, Arbeit, Versand & Fixkosten</div></div>
+    <div class="overview-live-kpi"><div class="label">Umsatz brutto</div><div class="value">${euro(sales.revenue)}</div><div class="sub">tatsächlich gebuchter Verkaufserlös</div></div>
+
+    <div class="overview-live-kpi"><div class="label">− Warenwert</div><div class="value">${euro(sales.cogs)}</div><div class="sub">tatsächlicher Lager-EK der Verkäufe</div></div>
+    <div class="overview-live-kpi"><div class="label">Rohertrag</div><div class="value ${gross>=0?'positive':'negative'}">${euro(gross)}</div><div class="sub">Umsatz − Warenwert · vor Verkaufskosten</div></div>
+    <div class="overview-live-kpi"><div class="label">− Weitere Verkaufskosten</div><div class="value">${euro(operatingCosts)}</div><div class="sub">Etsy, Arbeit, Versand, Werbung, Risiko & Fixkosten</div></div>
+
+    <div class="overview-live-kpi profit-kpi"><div class="label">Gewinn vor Einkommensteuer</div><div class="value ${sales.profit>=0?'positive':'negative'}">${euro(sales.profit)}</div><div class="sub">realisierter betrieblicher Gewinn</div></div>
+    <div class="overview-live-kpi"><div class="label">Empf. Steuerrücklage</div><div class="value">${euro(taxReserve)}</div><div class="sub">25 % vom positiven Gewinn · nur Planungsrücklage</div></div>
+    <div class="overview-live-kpi profit-kpi"><div class="label">Nach Steuerrücklage</div><div class="value ${profitAfterReserve>=0?'positive':'negative'}">${euro(profitAfterReserve)}</div><div class="sub">Gewinn abzüglich 25-%-Planungsrücklage</div></div>
+
+    <div class="overview-live-kpi"><div class="label">Gewinn letzte 30 Tage</div><div class="value ${sales.profit30>=0?'positive':'negative'}">${euro(sales.profit30)}</div><div class="sub">vor Einkommensteuer · ${sales.last30.toLocaleString('de-DE')} verkaufte Batches</div></div>
+    <div class="overview-live-kpi"><div class="label">Ø Gewinn / Batch</div><div class="value ${sales.avgProfit>=0?'positive':'negative'}">${euro(sales.avgProfit)}</div><div class="sub">vor Einkommensteuer · realisierter Durchschnitt</div></div>
     <div class="overview-live-kpi"><div class="label">Direkt lieferbare Varianten</div><div class="value">${variants.sellable} / ${variants.total}</div><div class="sub">aus dem echten Lager</div></div>
   </div>
-  ${sales.count?`<div class="overview-profit-breakdown">
-    <span><strong>Gewinnrechnung echte Verkäufe:</strong></span>
-    <span>Umsatz ${euro(sales.revenue)}</span><span>− Waren-EK ${euro(sales.cogs)}</span><span>− Etsy ${euro(sales.fees)}</span><span>− Arbeit ${euro(sales.labor)}</span><span>− Kundenversand ${euro(sales.outbound)}</span><span>− Werbung ${euro(sales.ads)}</span><span>− Risiko ${euro(sales.risk)}</span><span>− Fixkosten ${euro(sales.fixed)}</span><span>= <strong class="${sales.profit>=0?'positive':'negative'}">${euro(sales.profit)}</strong></span>
-  </div>`:''}
+  <div class="overview-profit-breakdown">
+    <span><strong>Gewinnweg:</strong></span>
+    <span>Umsatz ${euro(sales.revenue)}</span>
+    <span>− Waren-EK ${euro(sales.cogs)}</span>
+    <span>= Rohertrag ${euro(gross)}</span>
+    <span>− Etsy ${euro(sales.fees)}</span>
+    <span>− Arbeit ${euro(sales.labor)}</span>
+    <span>− Kundenversand ${euro(sales.outbound)}</span>
+    <span>− Werbung/Risiko ${euro(sales.ads+sales.risk)}</span>
+    <span>− Fixkosten ${euro(sales.fixed)}</span>
+    <span>= <strong>vor Steuer ${euro(sales.profit)}</strong></span>
+    <span>− Rücklage ${euro(taxReserve)}</span>
+    <span>= <strong class="${profitAfterReserve>=0?'positive':'negative'}">nach Rücklage ${euro(profitAfterReserve)}</strong></span>
+  </div>
+  <div class="tiny" style="margin:6px 0 12px">Die 25-%-Steuerrücklage ist eine vorsichtige Planungsgröße und keine berechnete Einkommensteuer. Die tatsächliche Einkommensteuer hängt von deinem gesamten steuerpflichtigen Jahreseinkommen ab.</div>
   <div class="overview-live-grid">
     <div class="overview-live-section"><h3>Nachbestellen & Engpässe ${reorder.length?`(${reorder.length})`:''}</h3><div class="overview-alert-list">${reorderHtml}</div>${reorder.length>8?`<div class="tiny" style="margin-top:6px">+ ${reorder.length-8} weitere Positionen im Reiter Verkäufe.</div>`:''}</div>
     <div class="overview-live-section"><h3>Letzte echte Verkäufe</h3><div class="overview-sales-list">${salesHtml}</div></div>
