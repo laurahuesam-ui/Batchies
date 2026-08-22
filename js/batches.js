@@ -205,13 +205,14 @@ function addBatchVariantRow(v=null){
   const key=v?.key||crypto.randomUUID(),name=v?.name||'',pc=v?.productColors||{},vc=v?.packagingColors||{};
   const products=$$('#batchItemRows .batch-product-row').map(r=>r.querySelector('.batch-product')?.value).filter(Boolean),
     packaging=$$('#batchPackagingRows .batch-packaging-row').map(r=>r.querySelector('.batch-packaging')?.value).filter(Boolean);
-  const variantDefault=name;
+  const coloredPackaging=packaging.filter(vid=>normalizeProductColors(state.packaging.find(x=>x.vid===vid)?.colors).length>0),
+    variantDefault=name;
   products.forEach(pid=>{if(!pc[pid]&&variantDefault&&normalizeProductColors(state.products.find(x=>x.pid===pid)?.colors).includes(variantDefault))pc[pid]=variantDefault});
-  packaging.forEach(vid=>{if(!vc[vid]&&variantDefault&&normalizeProductColors(state.packaging.find(x=>x.vid===vid)?.colors).includes(variantDefault))vc[vid]=variantDefault});
+  coloredPackaging.forEach(vid=>{if(!vc[vid]&&variantDefault&&normalizeProductColors(state.packaging.find(x=>x.vid===vid)?.colors).includes(variantDefault))vc[vid]=variantDefault});
   host.insertAdjacentHTML('beforeend',`<div class="batch-variant-card" data-key="${esc(key)}">
     <div class="batch-variant-head"><div class="field"><label>Verkaufsfarbe</label><select class="batch-variant-name">${batchVariantNameOptions(products,name,packaging)}</select></div><button type="button" class="iconbtn remove-batch-variant">✕</button></div>
     <div class="batch-variant-products">${products.map(pid=>{const p=state.products.find(x=>x.pid===pid);return `<div class="batch-variant-product" data-pid="${esc(pid)}"><div class="tiny"><strong>${esc(pid)}</strong> · ${esc(p?.name||pid)}</div><label>Farbe in dieser Variante</label><select class="batch-variant-product-color">${batchVariantProductOptions(pid,pc[pid]||'')}</select></div>`}).join('')}</div>
-    ${packaging.length?`<div class="tiny" style="font-weight:800;margin-top:8px">Verpackung / Versand (VID)</div><div class="batch-variant-packaging">${packaging.map(vid=>{const x=state.packaging.find(v=>v.vid===vid),colors=normalizeProductColors(x?.colors);return `<div class="batch-variant-packaging-item" data-vid="${esc(vid)}"><div class="tiny"><strong>${esc(vid)}</strong> · ${esc(x?.name||vid)}</div><label>Farbe in dieser Variante</label><select class="batch-variant-packaging-color"><option value="">Ohne Farbe / neutral</option>${colors.map(c=>`<option value="${esc(c)}" ${c===(vc[vid]||'')?'selected':''}>${esc(c)}</option>`).join('')}</select></div>`}).join('')}</div>`:''}
+    ${coloredPackaging.length?`<div class="tiny" style="font-weight:800;margin-top:8px">Verpackung / Versand (VID)</div><div class="batch-variant-packaging">${coloredPackaging.map(vid=>{const x=state.packaging.find(v=>v.vid===vid),colors=normalizeProductColors(x?.colors);return `<div class="batch-variant-packaging-item" data-vid="${esc(vid)}"><div class="tiny"><strong>${esc(vid)}</strong> · ${esc(x?.name||vid)}</div><label>Farbe in dieser Variante</label><select class="batch-variant-packaging-color"><option value="">Ohne Farbe / neutral</option>${colors.map(c=>`<option value="${esc(c)}" ${c===(vc[vid]||'')?'selected':''}>${esc(c)}</option>`).join('')}</select></div>`}).join('')}</div>`:''}
   </div>`);
   const card=host.lastElementChild;
   bindBatchVariantEvents();
