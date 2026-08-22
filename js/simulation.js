@@ -296,7 +296,7 @@ function salesGrowthOrderCostForQty(s,orderedQty){
       customs=(supplierHasCustoms(s)&&!ship.includesCustoms)?base*.12:0,
       subtotal=base+customs,
       vat=supplierVatAddon(s,subtotal);
-    return subtotal+vat
+    return subtotal+vat+supplierPaymentFee(s)
   }
 
   // True set/consumable packages are indivisible and are charged per package.

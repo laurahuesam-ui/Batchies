@@ -227,7 +227,7 @@ function planningSupplierOrderCostForQty(s,qty){
     customs=(s.customs&&!ship.includesCustoms)?base*.12:0,
     subtotal=base+customs,
     vat=supplierVatAddon(s,subtotal);
-  return subtotal+vat
+  return subtotal+vat+supplierPaymentFee(s)
 }
 function planningStrategicQuantities(s,requiredQty){
   const required=Math.max(1,Math.ceil(num(requiredQty,1))),
