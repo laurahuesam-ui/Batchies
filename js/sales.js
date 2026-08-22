@@ -494,6 +494,48 @@ function forecastScenarioTotal(){
   if(s==='custom')return Math.max(0,num(state.salesPlanning.startWeeklySales,1.5));
   return 1.5
 }
+function forecastScenarioGrowth(){
+  ensureSalesPlanning();
+  const s=state.salesPlanning.forecastScenario||'realistic';
+  if(s==='cautious')return {monthly:.10,cap:2.0};
+  if(s==='good')return {monthly:.28,cap:8.0};
+  if(s==='custom')return {monthly:.18,cap:5.0};
+  return {monthly:.18,cap:5.0}
+}
+function bookedSalesTrend(){
+  if(!hasAnyBookedSale())return null;
+  const now=Date.now(),week=7*86400000,counts=[];
+  for(let i=7;i>=0;i--){
+    const from=now-(i+1)*week,to=now-i*week;
+    counts.push((state.salesHistory||[]).filter(x=>{const t=new Date(x.soldAt).getTime();return t>=from&&t<to}).reduce((a,x)=>a+num(x.qty),0))
+  }
+  const recent=counts.slice(4).reduce((a,b)=>a+b,0)/4,prior=counts.slice(0,4).reduce((a,b)=>a+b,0)/4;
+  const raw=prior>0?(recent-prior)/prior:(recent>0?.25:0);
+  return Math.max(-.25,Math.min(.35,raw))
+}
+function forecastWeeklyTotalAt(week){
+  ensureSalesPlanning();
+  week=Math.max(1,num(week,1));
+  if(hasAnyBookedSale()){
+    const base=Math.max(0,totalActualSalesLast8Weeks()),trend=bookedSalesTrend()||0;
+    // Real data take over gradually; damp the measured 4-week trend to avoid explosive forecasts.
+    const monthly=Math.max(-.12,Math.min(.18,trend*.5));
+    return Math.max(0,base*Math.pow(1+monthly,(week-1)/4.345))
+  }
+  const base=forecastScenarioTotal(),g=forecastScenarioGrowth();
+  // New-shop ramp: reach/reviews/social proof build over time, but growth is capped.
+  return Math.min(g.cap,base*Math.pow(1+g.monthly,(week-1)/4.345))
+}
+function planningRateAt(batchKey,variant,week){
+  const vars=allConfiguredVariants();
+  if(hasAnyBookedSale()){
+    const actualTotal=Math.max(0,totalActualSalesLast8Weeks());
+    if(actualTotal<=0)return 0;
+    return forecastWeeklyTotalAt(week)*(actualWeeklyRate(batchKey,variant)/actualTotal)
+  }
+  const sumWeights=vars.reduce((a,x)=>a+forecastVariantWeight(x.b.key,x.variant),0);
+  return sumWeights>0?forecastWeeklyTotalAt(week)*forecastVariantWeight(batchKey,variant)/sumWeights:0
+}
 function totalActualSalesLast8Weeks(){
   return allConfiguredVariants().reduce((a,x)=>a+actualWeeklyRate(x.b.key,x.variant),0)
 }
@@ -522,12 +564,12 @@ function allConfiguredVariants(){
 function renderForecastVariantRates(){
   const el=$('#forecastVariantRates');if(!el)return;
   ensureSalesPlanning();
-  const vars=allConfiguredVariants(),hasSales=hasAnyBookedSale(),actualTotal=totalActualSalesLast8Weeks(),total=hasSales?actualTotal:forecastScenarioTotal();
-  el.innerHTML=`<div class="info"><strong>${hasSales?'Prognose aus gebuchten Verkäufen':'Startprognose aktiv'}: ${total.toFixed(2).replace('.',',')} Verkäufe/Woche insgesamt</strong><br>${hasSales?'Es gibt mindestens einen tatsächlich gebuchten Verkauf. Deshalb verwendet die Prognose jetzt die Verkaufsrate der letzten 8 Wochen.':'Noch kein Verkauf wurde unter „Verkäufe“ gebucht. Deshalb bleibt dein ausgewähltes Start-Szenario aktiv; vorhandene Batches, Varianten oder Lagerbestände zählen NICHT als Verkäufe. Die Gesamtzahl wird nicht pro Variante vervielfacht, sondern nur anhand der Gewichte verteilt.'}</div>
+  const vars=allConfiguredVariants(),hasSales=hasAnyBookedSale(),actualTotal=totalActualSalesLast8Weeks(),total=hasSales?actualTotal:forecastScenarioTotal(),endTotal=forecastWeeklyTotalAt(currentForecastWeeks());
+  el.innerHTML=`<div class="info"><strong>${hasSales?'Dynamische Prognose aus gebuchten Verkäufen':'Dynamische Startprognose'}: ${total.toFixed(2).replace('.',',')} Verkäufe/Woche zum Start → ca. ${endTotal.toFixed(2).replace('.',',')} / Woche am Prognoseende</strong><br>${hasSales?'Die letzten 8 Wochen bilden die Basis. Der jüngste 4-Wochen-Trend wird gedämpft fortgeschrieben, damit Wachstum oder Rückgang berücksichtigt wird, ohne unrealistisch zu explodieren.':'Ein neuer Shop startet bewusst niedriger. Reichweite, Bewertungen und Social Proof werden als allmählicher Wachstumseffekt modelliert. Vorsichtig, Realistisch und Gut haben unterschiedliche Wachstumskurven und Obergrenzen.'}</div>
   ${vars.length?`<div class="forecast-rate-grid">${vars.map(x=>`<div class="forecast-rate-card">
     <div><strong>${esc(x.b.bid)} · ${esc(x.variant)}</strong></div>
     <div class="rowline"><span class="tiny">Gewichtung</span><input class="forecast-rate-input" data-key="${esc(x.key)}" type="number" min="0" step="0.1" value="${forecastVariantWeight(x.b.key,x.variant)}"></div>
-    <div class="tiny">Prognose: ${planningRate(x.b.key,x.variant).toFixed(2).replace('.',',')} / Woche · Ist letzte 8 Wochen: ${actualWeeklyRate(x.b.key,x.variant).toFixed(2).replace('.',',')}</div>
+    <div class="tiny">Start: ${planningRateAt(x.b.key,x.variant,1).toFixed(2).replace('.',',')} / Woche · Ist letzte 8 Wochen: ${actualWeeklyRate(x.b.key,x.variant).toFixed(2).replace('.',',')}</div>
   </div>`).join('')}</div>`:'<div class="empty"><strong>Keine Verkaufsvarianten angelegt</strong></div>'}`;
   $$('.forecast-rate-input').forEach(inp=>inp.onchange=()=>{state.salesPlanning.variantRates[inp.dataset.key]=Math.max(0,num(inp.value));persistSalesPlanning();renderForecastAll()})
 }
@@ -751,10 +793,10 @@ function forecastActiveVariants(){
 
   return allConfiguredVariants()
 }
-function weeklyRequirements(){
+function weeklyRequirements(week=1){
   const map=new Map();
   forecastActiveVariants().forEach(x=>{
-    const rate=planningRate(x.b.key,x.variant);if(rate<=0)return;
+    const rate=planningRateAt(x.b.key,x.variant,week);if(rate<=0)return;
     saleRequirements(x.b,x.variant,1).forEach(req=>{
       const k=planningStockKey(req.kind,req.id,req.color);
       if(!map.has(k))map.set(k,{...req,weekly:0});
@@ -952,7 +994,6 @@ function runRealReinvestmentForecast(){
   }
 
   const horizon=currentForecastWeeks(),
-    reqWeekly=weeklyRequirements(),
     leadWeeks=Math.max(0,Math.ceil(state.salesPlanning.leadWeeks)),
     active=forecastActiveVariants();
 
@@ -972,7 +1013,7 @@ function runRealReinvestmentForecast(){
 
     // 2) Reorder BEFORE this week's sales if stock + already pending quantity
     // falls to the dynamic lead-time/safety threshold.
-    const reorderGroups=new Map();
+    const reorderGroups=new Map(),reqWeekly=weeklyRequirements(week);
 
     reqWeekly.forEach(r=>{
       const current=forecastStockAvailable(stock,r.kind,r.id,r.color),
@@ -1099,7 +1140,7 @@ function runRealReinvestmentForecast(){
   return{
     cash,initialCash,breakEvenWeek,breakEvenSales,breakEvenCash,
     events,totalForecastSales,totalReorders,reorderCost,stock,lostSales,
-    pendingOrders,weeklyTarget:hasAnyBookedSale()?totalActualSalesLast8Weeks():forecastScenarioTotal(),
+    pendingOrders,weeklyTarget:forecastWeeklyTotalAt(1),weeklyTargetEnd:forecastWeeklyTotalAt(horizon),
     expectedDemand,
     shortages:[...shortageMap.values()].sort((a,b)=>b.lostSales-a.lostSales)
   }
