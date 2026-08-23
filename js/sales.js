@@ -663,6 +663,95 @@ function aggregatePurchaseRequirements(){
   });
   return [...map.values()]
 }
+
+function purchaseOrderOverrideKey(kind,id){return kind+'|'+id}
+function purchaseOrderOverrideValue(kind,id){
+  ensureSalesPlanning();
+  const v=state.salesPlanning.orderOverrides?.[purchaseOrderOverrideKey(kind,id)];
+  return v===undefined||v===null||v===''?null:Math.max(0,num(v))
+}
+function legalManualPurchaseQty(s,requested){
+  const q=Math.max(0,num(requested));
+  if(q<=1e-9)return 0;
+  if(s.priceType==='set'){
+    const pack=Math.max(1,num(s.setQty,1));
+    return Math.ceil(q/pack-1e-9)*pack
+  }
+  if(s.priceType==='consumable'){
+    const pack=Math.max(.0001,supplierQtyBase(s));
+    return Math.ceil(q/pack-1e-9)*pack
+  }
+  const moq=Math.max(1,supplierQtyBase(s)),
+    setSize=typeof supplierUnitSetSize==='function'?supplierUnitSetSize(s):1,
+    legal=Math.max(moq,q);
+  return Math.ceil(legal/setSize-1e-9)*setSize
+}
+function manualPurchaseCost(s,qty){
+  if(!s||qty<=1e-9)return 0;
+  if(s.priceType==='set'){
+    const pack=Math.max(1,num(s.setQty,1)),
+      sets=Math.ceil(qty/pack-1e-9);
+    return sets*planningSupplierOrderCostForQty(s,pack)
+  }
+  if(s.priceType==='consumable'){
+    const pack=Math.max(.0001,supplierQtyBase(s)),
+      packs=Math.ceil(qty/pack-1e-9);
+    return packs*supplierOrderCost(s)
+  }
+  return planningSupplierOrderCostForQty(s,qty)
+}
+function allocateManualArrivals(priceType,s,details,ordered){
+  const arrivals={};
+  if(ordered<=1e-9)return arrivals;
+
+  if(priceType==='set'){
+    const comp=planningSetComposition(details[0]?.kind||'',details[0]?.id||'',s),
+      setQty=Math.max(1,num(s.setQty,1)),
+      sets=Math.ceil(ordered/setQty-1e-9);
+    Object.entries(comp).forEach(([c,n])=>arrivals[c]=n*sets);
+    return arrivals
+  }
+  if(priceType==='consumable'){
+    arrivals['']=ordered;
+    return arrivals
+  }
+
+  // Allocate the manually chosen quantity to actual color shortages first.
+  // If it is more than needed, the remainder stays flexible/neutral.
+  let left=ordered;
+  details.slice().sort((a,b)=>num(b.short)-num(a.short)).forEach(d=>{
+    const want=Math.max(0,num(d.short)),
+      take=Math.min(left,want);
+    if(take>1e-9){
+      arrivals[d.color||'']=(arrivals[d.color||'']||0)+take;
+      left-=take
+    }
+  });
+  if(left>1e-9)arrivals['']=(arrivals['']||0)+left;
+  return arrivals
+}
+function suggestedNextOrderQty(g){
+  const s=planningPreferredSupplier(g.kind,g.id);
+  if(!s)return Math.max(1,num(g.totalShort,1));
+  const x=legalManualPurchaseQty(s,g.totalShort);
+
+  if(s.priceType==='set')return x+Math.max(1,num(s.setQty,1));
+  if(s.priceType==='consumable')return x+Math.max(.0001,supplierQtyBase(s));
+
+  const valueQty=num(g.orderOptimization?.valueOption?.qty);
+  if(valueQty>x+1e-9)return valueQty;
+
+  const next=(g.orderComparison||[])
+    .map(q=>num(q.qty))
+    .filter(q=>q>x+1e-9)
+    .sort((a,b)=>a-b)[0];
+  if(next)return next;
+
+  const active=Math.max(0,supplierCalcQty(s));
+  if(active>x+1e-9)return active;
+
+  return x+Math.max(1,Math.ceil(x*.25))
+}
 function calcPurchasePlan(useStock=true){
   const reqs=aggregatePurchaseRequirements(),groups=new Map();
   reqs.forEach(r=>{
@@ -712,17 +801,44 @@ function calcPurchasePlan(useStock=true){
       g.orderComparison=planningOrderComparison(s,totalShort)
     }
 
-    const arrivals={};
-    if(priceType==='set'&&composition){
+    const manualRequested=purchaseOrderOverrideValue(g.kind,g.id);
+    let manualActive=manualRequested!==null;
+    if(manualActive&&s){
+      ordered=legalManualPurchaseQty(s,manualRequested);
+      cost=manualPurchaseCost(s,ordered);
+      if(priceType==='set'){
+        const setQty=Math.max(1,num(s.setQty,1));
+        sets=ordered>0?Math.ceil(ordered/setQty-1e-9):0;
+        composition=planningSetComposition(g.kind,g.id,s)
+      }else if(priceType==='consumable'){
+        moq=Math.max(.0001,supplierQtyBase(s))
+      }else{
+        moq=Math.max(1,supplierQtyBase(s))
+      }
+    }
+
+    let arrivals={};
+    if(manualActive&&s){
+      if(priceType==='set'){
+        const comp=composition||planningSetComposition(g.kind,g.id,s);
+        Object.entries(comp).forEach(([c,n])=>arrivals[c]=n*sets)
+      }else{
+        arrivals=allocateManualArrivals(priceType,s,details,ordered)
+      }
+    }else if(priceType==='set'&&composition){
       Object.entries(composition).forEach(([c,n])=>arrivals[c]=n*sets)
     }else{
-      details.forEach(d=>{if(d.short>1e-9)arrivals[d.color||'']=(arrivals[d.color||'']||0)+d.short});
-      const allocated=Object.values(arrivals).reduce((a,x)=>a+x,0);
-      if(ordered>allocated)arrivals['']=(arrivals['']||0)+(ordered-allocated)
+      let left=ordered;
+      details.slice().sort((a,b)=>num(b.short)-num(a.short)).forEach(d=>{
+        const take=Math.min(left,Math.max(0,num(d.short)));
+        if(take>1e-9){arrivals[d.color||'']=(arrivals[d.color||'']||0)+take;left-=take}
+      });
+      if(left>1e-9)arrivals['']=(arrivals['']||0)+left
     }
 
     const gp={kind:g.kind,id:g.id,priceType,requirements:details,totalNeed,totalAllocatedStock,totalShort,
       ordered,cost,moq,sets,composition,arrivals,excess:Math.max(0,ordered-totalShort),
+      manualRequested,manualActive,manualUnderNeed:manualActive&&ordered+1e-9<totalShort,
       orderOptimization:g.orderOptimization||null,
       orderComparison:g.orderComparison||[],
       missingSupplier:totalShort>1e-9&&!s,impossible};
@@ -782,6 +898,11 @@ function renderPurchaseCalc(){
         <div><strong>${order}</strong></div>
         <div class="money"><strong>${g.missingSupplier||g.impossible?'–':euro(g.cost)}</strong></div>
       </div>
+      ${!g.missingSupplier?`<div class="purchase-order-edit">
+        <div class="field"><label>Bestellmenge tatsächlich</label><input class="purchase-manual-order" data-kind="${esc(g.kind)}" data-id="${esc(g.id)}" type="number" min="0" step="1" value="${g.manualActive?g.manualRequested:g.ordered}" ${g.totalShort<=1e-9?'disabled':''}></div>
+        <button type="button" class="btn secondary purchase-order-auto" data-kind="${esc(g.kind)}" data-id="${esc(g.id)}" ${g.totalShort<=1e-9?'disabled':''}>Automatik</button>
+        <div class="tiny">${g.manualActive?`Manuell: Eingabe ${g.manualRequested} → tatsächlich zulässig ${g.ordered}.${g.manualUnderNeed?' ⚠ Deckt den aktuellen Bedarf nicht vollständig.':''}`:`Automatisch berechnet: ${g.ordered}. Ändern überschreibt die Automatik für diese Bestellliste und alle darauf aufbauenden Prognosen.`}</div>
+      </div>`:''}
       <div class="purchase-color-lines">${g.requirements.map(x=>`<div class="purchase-color-line">
         <span>${x.color?warehouseColorChip(x.color):warehouseColorChip('')}</span><span>Bedarf ${x.need}</span><span>Lager ${x.stock}</span><span>${x.short?`fehlen ${x.short}`:'✓ gedeckt'}</span>
       </div>`).join('')}</div>
@@ -804,7 +925,23 @@ function renderPurchaseCalc(){
     <div class="production-kpi"><div class="label">Produkte/VIDs</div><div class="value">${p.groupPlans.length}</div></div>
     <div class="production-kpi"><div class="label">Komplett aus Lager</div><div class="value">${covered}</div></div>
     <div class="production-kpi"><div class="label">Gesamtbedarf</div><div class="value">${totalNeeded.toLocaleString('de-DE')}</div></div>
-  </div><div class="purchase-group-list">${groups||'<div class="empty">Keine Auswahl</div>'}</div>`
+  </div><div class="purchase-group-list">${groups||'<div class="empty">Keine Auswahl</div>'}</div>`;
+
+  $$('.purchase-manual-order').forEach(inp=>inp.onchange=()=>{
+    ensureSalesPlanning();
+    state.salesPlanning.orderOverrides=state.salesPlanning.orderOverrides||{};
+    state.salesPlanning.orderOverrides[purchaseOrderOverrideKey(inp.dataset.kind,inp.dataset.id)]=Math.max(0,num(inp.value));
+    persistSalesPlanning();
+    renderPurchaseCalc();
+    renderForecastAll()
+  });
+  $$('.purchase-order-auto').forEach(btn=>btn.onclick=()=>{
+    ensureSalesPlanning();
+    if(state.salesPlanning.orderOverrides)delete state.salesPlanning.orderOverrides[purchaseOrderOverrideKey(btn.dataset.kind,btn.dataset.id)];
+    persistSalesPlanning();
+    renderPurchaseCalc();
+    renderForecastAll()
+  })
 }
 function forecastActiveVariants(){
   ensureSalesPlanning();
@@ -1428,9 +1565,11 @@ function renderOrderQuantitySimulation(){
     currentKey=items.some(g=>g.kind+'|'+g.id===saved.itemKey)?saved.itemKey:(items[0].kind+'|'+items[0].id),
     [kind,id]=currentKey.split('|'),
     gp=items.find(g=>g.kind===kind&&g.id===id),
-    defaultX=Math.max(1,Math.ceil(num(gp?.ordered||gp?.totalShort||1))),
-    x=Math.max(1,num(saved.x,defaultX)),
-    y=Math.max(1,num(saved.y,Math.max(defaultX+1,Math.ceil(defaultX*1.35)))),
+    defaultX=Math.max(1,num(gp?.totalShort||gp?.totalNeed||1)),
+    defaultY=Math.max(1,suggestedNextOrderQty(gp)),
+    sameSavedItem=saved.itemKey===currentKey,
+    x=Math.max(1,num(sameSavedItem?saved.x:null,defaultX)),
+    y=Math.max(1,num(sameSavedItem?saved.y:null,defaultY)),
     A=orderScenarioMetrics(kind,id,x),
     B=orderScenarioMetrics(kind,id,y);
 
@@ -1456,8 +1595,8 @@ function renderOrderQuantitySimulation(){
 
   el.innerHTML=`<div class="order-sim-controls">
     <div class="field"><label>PID / VID</label><select id="orderSimItem">${orderSimulationItemOptions(currentKey)}</select></div>
-    <div class="field"><label>Bestellmenge X</label><input id="orderSimX" type="number" min="1" step="1" value="${x}"></div>
-    <div class="field"><label>Bestellmenge Y</label><input id="orderSimY" type="number" min="1" step="1" value="${y}"></div>
+    <div class="field"><label>Bestellmenge X · Bedarf aus Einkaufsrechner</label><input id="orderSimX" type="number" min="1" step="1" value="${x}"></div>
+    <div class="field"><label>Bestellmenge Y · nächste sinnvolle Menge</label><input id="orderSimY" type="number" min="1" step="1" value="${y}"></div>
   </div>
   <div class="tiny" style="margin:5px 0 8px">X und Y werden als echte Bestellentscheidung behandelt. MOQ, Sets/Packgrößen, Lieferantenkosten sowie dieselbe Verkaufs-, Lager- und Nachbestellprognose wie unten werden berücksichtigt.</div>
   <div class="order-sim-compare">${card('X',A)}${card('Y',B)}</div>
@@ -1468,18 +1607,22 @@ function renderOrderQuantitySimulation(){
     ${B.result.breakEvenWeek!==null&&A.result.breakEvenWeek!==null?`Break-even: X Woche ${A.result.breakEvenWeek}, Y Woche ${B.result.breakEvenWeek}.`:''}
   </div>`;
 
-  const saveAndRender=()=>{
+  const saveXY=()=>{
     state.salesPlanning.orderSimulation={
-      itemKey:$('#orderSimItem')?.value||currentKey,
+      itemKey:currentKey,
       x:Math.max(1,num($('#orderSimX')?.value,x)),
       y:Math.max(1,num($('#orderSimY')?.value,y))
     };
     persistSalesPlanning();
     renderOrderQuantitySimulation()
   };
-  $('#orderSimItem').onchange=saveAndRender;
-  $('#orderSimX').onchange=saveAndRender;
-  $('#orderSimY').onchange=saveAndRender
+  $('#orderSimItem').onchange=()=>{
+    state.salesPlanning.orderSimulation={itemKey:$('#orderSimItem').value};
+    persistSalesPlanning();
+    renderOrderQuantitySimulation()
+  };
+  $('#orderSimX').onchange=saveXY;
+  $('#orderSimY').onchange=saveXY
 }
 function renderRealReinvestmentForecast(){
   const el=$('#realReinvestmentForecast');if(!el)return;

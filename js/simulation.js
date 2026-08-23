@@ -4,9 +4,18 @@ function simulationUnifiedOrder(type,id,needed,x){
   const s=simulationPreferredSupplier(x);
   if(!x||!s)return{ordered:0,cost:0,packs:0,missing:true,reason:'Lieferant fehlt'};
 
+  // Editable Bestellliste is the shared source of truth if an override exists.
+  const override=(typeof purchaseOrderOverrideValue==='function')?purchaseOrderOverrideValue(type,id):null;
+
   // Use exactly the same purchasing rules as the sales purchase calculator.
   if(typeof planningPreferredSupplier==='function'&&typeof planningPieceOrder==='function'){
     const supplier=planningPreferredSupplier(type,id)||s;
+    if(override!==null){
+      const ordered=legalManualPurchaseQty(supplier,override),
+        cost=manualPurchaseCost(supplier,ordered),
+        pack=supplier.priceType==='set'?Math.max(1,num(supplier.setQty,1)):supplier.priceType==='consumable'?Math.max(.0001,supplierQtyBase(supplier)):ordered;
+      return{ordered,cost,packs:ordered>0?Math.max(1,Math.ceil(ordered/Math.max(.0001,pack))):0,missing:false,reason:`manuelle Bestellliste: ${override} → ${ordered}`}
+    }
     if(supplier.priceType==='set'){
       const pack=Math.max(1,num(supplier.setQty,1)),
         packs=Math.max(1,Math.ceil(needed/pack-1e-9)),
@@ -65,7 +74,7 @@ function renderShoppingSimulation(){
   const picker=$('#simulationBatchPicker'),summary=$('#simulationSummary'),stockEl=$('#simulationStock'),results=$('#simulationResults');if(!picker||!summary||!stockEl||!results)return;
   state.simulationSelectedBatches=Array.isArray(state.simulationSelectedBatches)?state.simulationSelectedBatches.filter(k=>state.batches.some(b=>b.key===k)):[];
   const selected=new Set(state.simulationSelectedBatches);
-  picker.innerHTML=state.batches.length?state.batches.map(b=>`<label class="sim-batch-option ${selected.has(b.key)||selected.has(b.bid)?'selected':''}"><input type="checkbox" class="simulation-batch-check" value="${esc(b.key)}" ${selected.has(b.key)||selected.has(b.bid)?'checked':''}><div><div><span class="idchip">${esc(b.bid)}</span></div><div class="name" style="margin-top:4px">${esc(b.name)}</div><div class="tiny">1. AK einzeln: ${euro(batchProductionPlan(b).firstOrderCost)}</div></div></label>`).join(''):'<div class="muted">Noch keine Batches vorhanden.</div>';
+  picker.innerHTML=state.batches.length?state.batches.map(b=>`<label class="sim-batch-option ${selected.has(b.key)||selected.has(b.bid)?'selected':''}"><input type="checkbox" class="simulation-batch-check" value="${esc(b.key)}" ${selected.has(b.key)||selected.has(b.bid)?'checked':''}><div><div><span class="idchip">${esc(b.bid)}</span></div><div class="name" style="margin-top:4px">${esc(b.name)}</div><div class="tiny">1. AK einzeln: ${euro(batchProductionPlan(b).firstOrderCost)} · Bestelllogik wie Einkaufsrechner</div></div></label>`).join(''):'<div class="muted">Noch keine Batches vorhanden.</div>';
   const cart=simulationBuildCart();
   summary.innerHTML=`<div class="sim-kpi"><div class="label">Ausgewählte Batches</div><div class="value">${cart.selected.size}</div></div><div class="sim-kpi"><div class="label">Verschiedene Positionen bestellt</div><div class="value">${cart.lines.length}</div></div><div class="sim-kpi"><div class="label">Stück insgesamt bestellt</div><div class="value">${cart.totalUnits}</div></div><div class="sim-kpi"><div class="label">Warenkorb / Investition</div><div class="value">${euro(cart.totalCost)}</div></div>`;
   stockEl.innerHTML=cart.lines.length?`<div class="table-wrap"><table class="sim-stock-table"><thead><tr><th>ID</th><th>Produkt / Verpackung</th><th>Bestellte Menge</th><th>Bestellwert</th><th>Warum bestellt?</th></tr></thead><tbody>${cart.lines.map(x=>`<tr><td><span class="idchip">${esc(x.id)}</span></td><td>${esc(x.name)}<div class="tiny">${esc(x.type)}</div></td><td>${x.missing?'–':x.ordered+' Stk.'}${x.packs>1?` <span class="tiny">(${x.packs} Bestellungen)</span>`:''}</td><td class="money">${x.missing?'–':euro(x.cost)}</td><td class="tiny">Bedarf durch Auswahl: ${x.needed} Stk.${x.missing?' · Lieferant fehlt':` · ${esc(x.reason||'zentrale Bestelllogik')}`}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty"><strong>Noch kein Batch ausgewählt</strong>Wähle oben einen oder mehrere Batches aus.</div>';
@@ -354,31 +363,50 @@ function salesGrowthOrderForNeed(kind,id,neededQty){
   const {x,s}=salesGrowthSupplier(kind,id);
   if(!x||!s)return{kind,id,name:x?.name||id,neededQty,baseQty:0,packs:0,orderedQty:0,cost:0,missing:true};
 
-  const needed=Math.max(.001,num(neededQty));
+  const needed=Math.max(.001,num(neededQty)),
+    override=(typeof purchaseOrderOverrideValue==='function')?purchaseOrderOverrideValue(kind,id):null;
 
-  if(s.priceType!=='set'&&s.priceType!=='consumable'){
-    // The active calculation quantity expresses the realistic order size.
-    // MOQ remains a minimum. Above the selected realistic quantity, normal
-    // unit products can grow piece-by-piece; "unit sold as set" rounds to full sets.
-    const plannedMin=Math.max(supplierQtyBase(s),supplierCalcQty(s)),
-      setSize=typeof supplierUnitSetSize==='function'?supplierUnitSetSize(s):1,
-      rawNeeded=Math.ceil(Math.max(needed,plannedMin)/setSize-1e-9),
-      orderedQty=rawNeeded*setSize,
-      cost=salesGrowthOrderCostForQty(s,orderedQty);
-
+  if(override!==null&&typeof legalManualPurchaseQty==='function'){
+    const orderedQty=legalManualPurchaseQty(s,override),
+      cost=manualPurchaseCost(s,orderedQty);
     return{
       kind,id,name:x.name,neededQty:needed,
-      baseQty:plannedMin,packs:1,orderedQty,cost,missing:false,
-      orderMode:setSize>1?'unit-set':'unit'
+      baseQty:supplierQtyBase(s),packs:orderedQty>0?1:0,orderedQty,cost,missing:false,
+      orderMode:'manual-list',manualRequested:override
     }
   }
 
-  const baseQty=Math.max(.001,supplierQtyBase(s)),
-    packs=Math.max(1,Math.ceil(needed/baseQty-1e-9)),
-    orderedQty=packs*baseQty,
-    cost=salesGrowthOrderCostForQty(s,orderedQty);
+  if(s.priceType==='set'){
+    const pack=Math.max(1,num(s.setQty,1)),
+      packs=Math.max(1,Math.ceil(needed/pack-1e-9)),
+      orderedQty=packs*pack,
+      cost=manualPurchaseCost(s,orderedQty);
+    return{kind,id,name:x.name,neededQty:needed,baseQty:pack,packs,orderedQty,cost,missing:false,orderMode:'set'}
+  }
 
-  return{kind,id,name:x.name,neededQty:needed,baseQty,packs,orderedQty,cost,missing:false,orderMode:'package'}
+  if(s.priceType==='consumable'){
+    const pack=Math.max(.001,supplierQtyBase(s)),
+      packs=Math.max(1,Math.ceil(needed/pack-1e-9)),
+      orderedQty=packs*pack,
+      cost=manualPurchaseCost(s,orderedQty);
+    return{kind,id,name:x.name,neededQty:needed,baseQty:pack,packs,orderedQty,cost,missing:false,orderMode:'package'}
+  }
+
+  const o=(typeof planningPieceOrder==='function')
+    ?planningPieceOrder(kind,id,needed,s)
+    :null;
+  if(o){
+    return{
+      kind,id,name:x.name,neededQty:needed,
+      baseQty:o.moq,packs:1,orderedQty:o.ordered,cost:o.cost,missing:false,
+      orderMode:'central-planning'
+    }
+  }
+
+  const plannedMin=Math.max(supplierQtyBase(s),supplierCalcQty(s)),
+    orderedQty=Math.max(plannedMin,Math.ceil(needed)),
+    cost=salesGrowthOrderCostForQty(s,orderedQty);
+  return{kind,id,name:x.name,neededQty:needed,baseQty:plannedMin,packs:1,orderedQty,cost,missing:false,orderMode:'fallback'}
 }
 function salesGrowthInitialPurchase(b){
   const lines=salesGrowthBatchNeeds(b).map(n=>salesGrowthOrderForNeed(n.kind,n.id,n.qty));
