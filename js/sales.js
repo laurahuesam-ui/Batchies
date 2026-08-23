@@ -614,7 +614,7 @@ function purchaseCalcAddRow(row=null){
   if(!first)return;
   const variant=row?.variant||batchSaleVariants(first)[0]?.name||'';
   state.salesPlanning.purchaseRows.push({key:row?.key||crypto.randomUUID(),batchKey:row?.batchKey||first.key,variant,qty:Math.max(1,num(row?.qty,1))});
-  persistSalesPlanning();renderPurchaseCalcRows();renderPurchaseCalc()
+  persistSalesPlanning();renderPurchaseCalcRows();renderPurchaseCalc();renderForecastAll()
 }
 function purchaseCalcAddAllVariants(){
   ensureSalesPlanning();
@@ -626,7 +626,7 @@ function purchaseCalcAddAllVariants(){
     state.salesPlanning.purchaseRows.push({key:crypto.randomUUID(),batchKey:x.b.key,variant:x.variant,qty:1});
     existing.add(k);added++
   });
-  persistSalesPlanning();renderPurchaseCalcRows();renderPurchaseCalc();
+  persistSalesPlanning();renderPurchaseCalcRows();renderPurchaseCalc();renderForecastAll();
   return added
 }
 
@@ -646,8 +646,8 @@ function renderPurchaseCalcRows(){
   $$('.purchase-calc-row').forEach(row=>{
     const key=row.dataset.key,r=state.salesPlanning.purchaseRows.find(x=>x.key===key),bsel=row.querySelector('.purchase-row-batch'),vsel=row.querySelector('.purchase-row-variant'),q=row.querySelector('.purchase-row-qty');
     bsel.onchange=()=>{r.batchKey=bsel.value;const b=state.batches.find(x=>x.key===r.batchKey);r.variant=batchSaleVariants(b)[0]?.name||'';persistSalesPlanning();renderPurchaseCalcRows();renderPurchaseCalc()};
-    vsel.onchange=()=>{r.variant=vsel.value;persistSalesPlanning();renderPurchaseCalc()};
-    q.onchange=()=>{r.qty=Math.max(1,Math.floor(num(q.value,1)));persistSalesPlanning();renderPurchaseCalc()};
+    vsel.onchange=()=>{r.variant=vsel.value;persistSalesPlanning();renderPurchaseCalc();renderForecastAll()};
+    q.onchange=()=>{r.qty=Math.max(1,Math.floor(num(q.value,1)));persistSalesPlanning();renderPurchaseCalc();renderForecastAll()};
     row.querySelector('.purchase-row-remove').onclick=()=>{state.salesPlanning.purchaseRows=state.salesPlanning.purchaseRows.filter(x=>x.key!==key);persistSalesPlanning();renderPurchaseCalcRows();renderPurchaseCalc()}
   })
 }
@@ -997,7 +997,52 @@ function forecastShortageKey(r){return planningStockKey(r.kind,r.id,r.color)}
 function forecastShortageLabel(r){
   return `${r.id} · ${warehouseItemName(r.kind,r.id)}${r.color?' · '+r.color:''}`
 }
-function runRealReinvestmentForecast(horizonOverride=null){
+
+function manualOrderLegalQuote(kind,id,requestedQty,baseGroup=null){
+  const supplier=planningPreferredSupplier(kind,id);
+  if(!supplier)return{requested:requestedQty,ordered:0,cost:0,arrivals:{},missing:true};
+
+  const requested=Math.max(0,num(requestedQty));
+  let ordered=0,cost=0,arrivals={};
+
+  if(supplier.priceType==='set'){
+    const setQty=Math.max(1,num(supplier.setQty,1)),
+      sets=requested<=0?0:Math.max(1,Math.ceil(requested/setQty-1e-9));
+    ordered=sets*setQty;
+    cost=sets?planningSupplierOrderCostForQty(supplier,ordered):0;
+    const comp=planningSetComposition(kind,id,supplier);
+    Object.entries(comp).forEach(([c,n])=>arrivals[c]=n*sets)
+  }else if(supplier.priceType==='consumable'){
+    const pack=Math.max(.0001,supplierQtyBase(supplier)),
+      packs=requested<=0?0:Math.max(1,Math.ceil(requested/pack-1e-9));
+    ordered=packs*pack;
+    cost=packs*supplierOrderCost(supplier);
+    if(ordered>0)arrivals['']=ordered
+  }else{
+    const moq=Math.max(1,supplierQtyBase(supplier));
+    ordered=requested<=0?0:Math.max(moq,Math.ceil(requested));
+    cost=ordered?planningSupplierOrderCostForQty(supplier,ordered):0;
+
+    // Preserve requested color mix from purchase calculator first; any surplus is flexible.
+    let left=ordered;
+    const req=(baseGroup?.requirements||[]).slice().sort((a,b)=>num(b.short)-num(a.short));
+    req.forEach(r=>{
+      const want=Math.max(0,num(r.short||r.need)),
+        take=Math.min(left,want);
+      if(take>1e-9){arrivals[r.color||'']=(arrivals[r.color||'']||0)+take;left-=take}
+    });
+    if(left>1e-9)arrivals['']=(arrivals['']||0)+left
+  }
+  return{requested,ordered,cost,arrivals,missing:false}
+}
+
+function orderSimulationItems(){
+  return calcPurchasePlan(false).groupPlans.filter(g=>planningPreferredSupplier(g.kind,g.id))
+}
+function orderSimulationItemOptions(selected=''){
+  return orderSimulationItems().map(g=>`<option value="${esc(g.kind+'|'+g.id)}" ${g.kind+'|'+g.id===selected?'selected':''}>${esc(g.id)} · ${esc(warehouseItemName(g.kind,g.id))}</option>`).join('')
+}
+function runRealReinvestmentForecast(horizonOverride=null,manualOrderScenario=null){
   ensureSalesPlanning();
 
   let stock=cloneForecastStock(),
@@ -1012,15 +1057,35 @@ function runRealReinvestmentForecast(horizonOverride=null){
   // virtual initial stock. Break-even is evaluated only AFTER this investment.
   if(!hasRealStock){
     const plan=calcPurchasePlan(false);
-    cash-=plan.total;
-    plan.groupPlans.forEach(g=>Object.entries(g.arrivals||{}).forEach(([color,qty])=>{
-      if(qty>1e-9)forecastAddOrder(stock,{kind:g.kind,id:g.id,color},qty)
-    }));
-    if(plan.total>0)events.push({
+    let initialCost=0;
+    plan.groupPlans.forEach(g=>{
+      let cost=g.cost,arrivals=g.arrivals||{},label='';
+      if(manualOrderScenario&&manualOrderScenario.kind===g.kind&&manualOrderScenario.id===g.id){
+        const q=manualOrderLegalQuote(g.kind,g.id,manualOrderScenario.qty,g);
+        cost=q.cost;arrivals=q.arrivals;
+        label=` · ${g.id} ersetzt durch ${q.ordered} Stück`
+      }
+      initialCost+=cost;
+      Object.entries(arrivals).forEach(([color,qty])=>{
+        if(qty>1e-9)forecastAddOrder(stock,{kind:g.kind,id:g.id,color},qty)
+      });
+      if(label)events.push({week:0,type:'order-scenario',text:`Bestellsimulation${label}`,amount:-cost})
+    });
+    cash-=initialCost;
+    if(initialCost>0)events.push({
       week:0,type:'purchase',
       text:'Virtueller Ersteinkauf aus Einkaufsrechner',
-      amount:-plan.total
+      amount:-initialCost
     })
+  }else if(manualOrderScenario){
+    // With real stock, X/Y is modeled as an additional real order placed now.
+    const base=calcPurchasePlan(false).groupPlans.find(g=>g.kind===manualOrderScenario.kind&&g.id===manualOrderScenario.id),
+      q=manualOrderLegalQuote(manualOrderScenario.kind,manualOrderScenario.id,manualOrderScenario.qty,base);
+    cash-=q.cost;
+    Object.entries(q.arrivals).forEach(([color,qty])=>{
+      if(qty>1e-9)forecastAddOrder(stock,{kind:manualOrderScenario.kind,id:manualOrderScenario.id,color},qty)
+    });
+    if(q.cost>0)events.push({week:0,type:'order-scenario',text:`Bestellsimulation ${manualOrderScenario.id} · ${q.ordered} Stück`,amount:-q.cost})
   }
 
   const initialCash=cash,
@@ -1328,6 +1393,94 @@ function findRealReinvestmentBreakEven(){
   }
   return{...runRealReinvestmentForecast(maxWeeks),searchWeeks:maxWeeks,found:false}
 }
+
+function firstReorderForItem(result,kind,id){
+  return (result.events||[]).find(e=>e.type==='reorder'&&String(e.text||'').includes(id))||null
+}
+function orderScenarioMetrics(kind,id,qty){
+  const basePlan=calcPurchasePlan(false).groupPlans.find(g=>g.kind===kind&&g.id===id),
+    quote=manualOrderLegalQuote(kind,id,qty,basePlan),
+    result=runRealReinvestmentForecast(currentForecastWeeks(),{kind,id,qty}),
+    first=firstReorderForItem(result,kind,id),
+    demandWeeks=[];
+  for(let w=1;w<=currentForecastWeeks();w++){
+    const d=weeklyRequirements(w).filter(r=>r.kind===kind&&r.id===id).reduce((a,r)=>a+r.weekly,0);
+    demandWeeks.push(d)
+  }
+  let cumulative=0,coverage=currentForecastWeeks();
+  for(let i=0;i<demandWeeks.length;i++){
+    cumulative+=demandWeeks[i];
+    if(cumulative>=quote.ordered-1e-9){coverage=i+1;break}
+  }
+  return{
+    quote,result,first,coverage,
+    unit:quote.ordered>0?quote.cost/quote.ordered:0
+  }
+}
+function renderOrderQuantitySimulation(){
+  const el=$('#orderQuantitySimulation');if(!el)return;
+  const items=orderSimulationItems();
+  if(!items.length){
+    el.innerHTML='<div class="empty"><strong>Keine Artikel zum Vergleichen</strong>Wähle zuerst Batch-Varianten im Einkaufsrechner aus.</div>';
+    return
+  }
+  const saved=state.salesPlanning.orderSimulation||{},
+    currentKey=items.some(g=>g.kind+'|'+g.id===saved.itemKey)?saved.itemKey:(items[0].kind+'|'+items[0].id),
+    [kind,id]=currentKey.split('|'),
+    gp=items.find(g=>g.kind===kind&&g.id===id),
+    defaultX=Math.max(1,Math.ceil(num(gp?.ordered||gp?.totalShort||1))),
+    x=Math.max(1,num(saved.x,defaultX)),
+    y=Math.max(1,num(saved.y,Math.max(defaultX+1,Math.ceil(defaultX*1.35)))),
+    A=orderScenarioMetrics(kind,id,x),
+    B=orderScenarioMetrics(kind,id,y);
+
+  const card=(label,m)=>`<div class="order-sim-card">
+    <div class="order-sim-title">${label} · ${m.quote.ordered} Stück</div>
+    <div class="order-sim-grid">
+      <div><span>Bestellkosten</span><strong>${euro(m.quote.cost)}</strong></div>
+      <div><span>Preis/Stück</span><strong>${euro(m.unit)}</strong></div>
+      <div><span>Reichweite rechnerisch</span><strong>ca. ${m.coverage} Wochen</strong></div>
+      <div><span>Nächste Nachbestellung</span><strong>${m.first?`Woche ${m.first.week}`:'im Zeitraum keine'}</strong></div>
+      <div><span>Break-even</span><strong>${m.result.breakEvenWeek===null?'nicht erreicht':m.result.breakEvenWeek===0?'bereits erreicht':`Woche ${m.result.breakEvenWeek}`}</strong></div>
+      <div><span>Cash am Periodenende</span><strong class="${m.result.cash>=0?'positive':'negative'}">${euro(m.result.cash)}</strong></div>
+      <div><span>Lieferbare Verkäufe</span><strong>${m.result.totalForecastSales.toFixed(1)}</strong></div>
+      <div><span>Nicht lieferbar</span><strong>${m.result.lostSales.toFixed(1)}</strong></div>
+      <div><span>Nachbestellkosten gesamt</span><strong>${euro(m.result.reorderCost)}</strong></div>
+    </div>
+  </div>`;
+
+  const cashDiff=B.result.cash-A.result.cash,
+    costDiff=B.quote.cost-A.quote.cost,
+    unitDiff=B.unit-A.unit,
+    lostDiff=B.result.lostSales-A.result.lostSales;
+
+  el.innerHTML=`<div class="order-sim-controls">
+    <div class="field"><label>PID / VID</label><select id="orderSimItem">${orderSimulationItemOptions(currentKey)}</select></div>
+    <div class="field"><label>Bestellmenge X</label><input id="orderSimX" type="number" min="1" step="1" value="${x}"></div>
+    <div class="field"><label>Bestellmenge Y</label><input id="orderSimY" type="number" min="1" step="1" value="${y}"></div>
+  </div>
+  <div class="tiny" style="margin:5px 0 8px">X und Y werden als echte Bestellentscheidung behandelt. MOQ, Sets/Packgrößen, Lieferantenkosten sowie dieselbe Verkaufs-, Lager- und Nachbestellprognose wie unten werden berücksichtigt.</div>
+  <div class="order-sim-compare">${card('X',A)}${card('Y',B)}</div>
+  <div class="info order-sim-delta"><strong>Unterschied Y gegenüber X:</strong>
+    ${euro(costDiff)} mehr/weniger Anfangskapital · ${euro(unitDiff)} je Stück ·
+    ${lostDiff>0?lostDiff.toFixed(1)+' mehr gefährdete Verkäufe':Math.abs(lostDiff).toFixed(1)+' weniger gefährdete Verkäufe'} ·
+    Cash am Ende ${cashDiff>=0?'+':''}${euro(cashDiff)}.
+    ${B.result.breakEvenWeek!==null&&A.result.breakEvenWeek!==null?`Break-even: X Woche ${A.result.breakEvenWeek}, Y Woche ${B.result.breakEvenWeek}.`:''}
+  </div>`;
+
+  const saveAndRender=()=>{
+    state.salesPlanning.orderSimulation={
+      itemKey:$('#orderSimItem')?.value||currentKey,
+      x:Math.max(1,num($('#orderSimX')?.value,x)),
+      y:Math.max(1,num($('#orderSimY')?.value,y))
+    };
+    persistSalesPlanning();
+    renderOrderQuantitySimulation()
+  };
+  $('#orderSimItem').onchange=saveAndRender;
+  $('#orderSimX').onchange=saveAndRender;
+  $('#orderSimY').onchange=saveAndRender
+}
 function renderRealReinvestmentForecast(){
   const el=$('#realReinvestmentForecast');if(!el)return;
   const r=runRealReinvestmentForecast(),
@@ -1390,6 +1543,7 @@ function renderForecastAll(){
   if(startWrap)startWrap.classList.toggle('hidden',(state.salesPlanning.forecastScenario||'realistic')!=='custom');
   if(wrap)wrap.classList.toggle('hidden',(state.salesPlanning.horizonPreset||'52w')!=='custom');
   try{renderForecastVariantRates()}catch(err){console.error('Forecast Varianten:',err)}
+  try{renderOrderQuantitySimulation()}catch(err){console.error('Bestellmengen-Simulation:',err)}
   try{renderForecastReorderTable()}catch(err){console.error('Nachbestellpunkte:',err)}
   try{renderRealReinvestmentForecast()}catch(err){console.error('Break-even/Reinvestition:',err);const el=$('#realReinvestmentForecast');if(el)el.innerHTML='<div class="hint">Prognose konnte nicht berechnet werden. Details stehen in der Browser-Konsole.</div>'}
 }
