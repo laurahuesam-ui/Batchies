@@ -43,25 +43,51 @@ function simulationUnifiedOrder(type,id,needed,x){
   return{ordered,cost,packs,missing:false,reason:'Fallback Packgröße'}
 }
 function simulationBuildCart(){
-  const selected=new Set(state.simulationSelectedBatches||[]),pr=new Map(),vr=new Map();
-  state.batches.filter(b=>selected.has(b.key)||selected.has(b.bid)).forEach(b=>{
-    (b.items||[]).forEach(i=>pr.set(i.pid,(pr.get(i.pid)||0)+Math.max(1,num(i.qty,1))));
-    (b.packagingItems||[]).forEach(i=>vr.set(i.vid,(vr.get(i.vid)||0)+Math.max(1,num(i.qty,1))))
+  // SINGLE SOURCE OF TRUTH: the editable order list from
+  // "Einkaufsrechner nach Batch-Varianten".
+  const useStock=$('#purchaseCalcUseStock')?.checked!==false,
+    plan=(typeof calcPurchasePlan==='function')?calcPurchasePlan(useStock):{groupPlans:[],total:0},
+    stock=new Map(),lines=[],
+    selected=new Set((state.salesPlanning?.purchaseRows||[]).map(r=>r.batchKey));
+
+  let totalUnits=0,missingSupplier=false;
+  (plan.groupPlans||[]).forEach(g=>{
+    const ordered=Math.max(0,num(g.ordered)),
+      cost=Math.max(0,num(g.cost));
+    if(g.missingSupplier||g.impossible)missingSupplier=true;
+
+    // Shopping-simulation capacity is still item-level; sum every color arrival
+    // exactly once to the PID/VID total.
+    const arrivalTotal=Object.values(g.arrivals||{}).reduce((a,n)=>a+Math.max(0,num(n)),0);
+    stock.set(g.id,arrivalTotal);
+    totalUnits+=arrivalTotal;
+
+    lines.push({
+      id:g.id,
+      name:warehouseItemName(g.kind,g.id),
+      needed:g.totalNeed,
+      short:g.totalShort,
+      ordered:arrivalTotal,
+      cost,
+      missing:g.missingSupplier||g.impossible,
+      type:g.kind,
+      manual:!!g.manualActive,
+      manualRequested:g.manualRequested,
+      reason:g.manualActive
+        ?`manuelle Bestellliste: ${g.manualRequested} → ${g.ordered}`
+        :(g.priceType==='set'
+          ?`${g.sets} vollständige${g.sets===1?'s':' Sets'}`
+          :g.orderOptimization?.reason||'automatische Bestellliste')
+    })
   });
-  let totalCost=0,totalUnits=0,missingSupplier=false;const stock=new Map(),lines=[];
-  const add=(id,needed,x,type)=>{
-    const o=simulationUnifiedOrder(type,id,needed,x);
-    if(o.missing){
-      missingSupplier=true;stock.set(id,0);
-      lines.push({id,name:x?.name||(type==='VID'?'Verpackung fehlt':'Produkt fehlt'),needed,ordered:0,packs:0,cost:0,missing:true,type,reason:o.reason});
-      return
-    }
-    stock.set(id,o.ordered);totalCost+=o.cost;totalUnits+=o.ordered;
-    lines.push({id,name:x.name,needed,ordered:o.ordered,packs:o.packs,cost:o.cost,missing:false,type,reason:o.reason})
-  };
-  [...pr.entries()].sort((a,b)=>parseIdNumber(a[0],'PID')-parseIdNumber(b[0],'PID')).forEach(([id,n])=>add(id,n,state.products.find(x=>x.pid===id),'PID'));
-  [...vr.entries()].sort((a,b)=>parseIdNumber(a[0],'VID')-parseIdNumber(b[0],'VID')).forEach(([id,n])=>add(id,n,state.packaging.find(x=>x.vid===id),'VID'));
-  return{selected,stock,lines,totalCost,totalUnits,missingSupplier}
+
+  return{
+    selected,stock,lines,
+    totalCost:Math.max(0,num(plan.total)),
+    totalUnits,
+    missingSupplier,
+    plan
+  }
 }
 function simulationBatchGap(batch,cart){
   const pr=new Map(),vr=new Map();(batch.items||[]).forEach(i=>pr.set(i.pid,(pr.get(i.pid)||0)+Math.max(1,num(i.qty,1))));(batch.packagingItems||[]).forEach(i=>vr.set(i.vid,(vr.get(i.vid)||0)+Math.max(1,num(i.qty,1))));
@@ -71,18 +97,73 @@ function simulationBatchGap(batch,cart){
   return{possible:missing.length===0,missing,extraCost,missingSupplier}
 }
 function renderShoppingSimulation(){
-  const picker=$('#simulationBatchPicker'),summary=$('#simulationSummary'),stockEl=$('#simulationStock'),results=$('#simulationResults');if(!picker||!summary||!stockEl||!results)return;
-  state.simulationSelectedBatches=Array.isArray(state.simulationSelectedBatches)?state.simulationSelectedBatches.filter(k=>state.batches.some(b=>b.key===k)):[];
-  const selected=new Set(state.simulationSelectedBatches);
-  picker.innerHTML=state.batches.length?state.batches.map(b=>`<label class="sim-batch-option ${selected.has(b.key)||selected.has(b.bid)?'selected':''}"><input type="checkbox" class="simulation-batch-check" value="${esc(b.key)}" ${selected.has(b.key)||selected.has(b.bid)?'checked':''}><div><div><span class="idchip">${esc(b.bid)}</span></div><div class="name" style="margin-top:4px">${esc(b.name)}</div><div class="tiny">1. AK einzeln: ${euro(batchProductionPlan(b).firstOrderCost)} · Bestelllogik wie Einkaufsrechner</div></div></label>`).join(''):'<div class="muted">Noch keine Batches vorhanden.</div>';
-  const cart=simulationBuildCart();
-  summary.innerHTML=`<div class="sim-kpi"><div class="label">Ausgewählte Batches</div><div class="value">${cart.selected.size}</div></div><div class="sim-kpi"><div class="label">Verschiedene Positionen bestellt</div><div class="value">${cart.lines.length}</div></div><div class="sim-kpi"><div class="label">Stück insgesamt bestellt</div><div class="value">${cart.totalUnits}</div></div><div class="sim-kpi"><div class="label">Warenkorb / Investition</div><div class="value">${euro(cart.totalCost)}</div></div>`;
-  stockEl.innerHTML=cart.lines.length?`<div class="table-wrap"><table class="sim-stock-table"><thead><tr><th>ID</th><th>Produkt / Verpackung</th><th>Bestellte Menge</th><th>Bestellwert</th><th>Warum bestellt?</th></tr></thead><tbody>${cart.lines.map(x=>`<tr><td><span class="idchip">${esc(x.id)}</span></td><td>${esc(x.name)}<div class="tiny">${esc(x.type)}</div></td><td>${x.missing?'–':x.ordered+' Stk.'}${x.packs>1?` <span class="tiny">(${x.packs} Bestellungen)</span>`:''}</td><td class="money">${x.missing?'–':euro(x.cost)}</td><td class="tiny">Bedarf durch Auswahl: ${x.needed} Stk.${x.missing?' · Lieferant fehlt':` · ${esc(x.reason||'zentrale Bestelllogik')}`}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty"><strong>Noch kein Batch ausgewählt</strong>Wähle oben einen oder mehrere Batches aus.</div>';
+  const picker=$('#simulationBatchPicker'),summary=$('#simulationSummary'),
+    stockEl=$('#simulationStock'),results=$('#simulationResults');
+  if(!picker||!summary||!stockEl||!results)return;
+
+  const rows=state.salesPlanning?.purchaseRows||[],
+    cart=simulationBuildCart(),
+    distinctBatches=[...new Set(rows.map(r=>r.batchKey))];
+
+  picker.innerHTML=rows.length
+    ?`<div class="info" style="grid-column:1/-1"><strong>Quelle: Einkaufsrechner nach Batch-Varianten</strong><br>Diese Auswahl wird hier nicht mehr separat gepflegt. Änderungen an Batch, Farbe, Menge oder Bestellmenge erfolgen im Reiter „Verkäufe“ und werden hier automatisch übernommen.</div>`+
+      rows.map(r=>{
+        const b=state.batches.find(x=>x.key===r.batchKey);
+        return `<div class="sim-batch-option selected">
+          <div><span class="idchip">${esc(b?.bid||'–')}</span></div>
+          <div class="name" style="margin-top:4px">${esc(b?.name||'Batch fehlt')}</div>
+          <div class="tiny">${esc(r.variant||'ohne Variante')} · ${Math.max(1,num(r.qty,1))}×</div>
+        </div>`
+      }).join('')
+    :'<div class="empty" style="grid-column:1/-1"><strong>Noch keine Bestellliste</strong>Füge im Reiter „Verkäufe“ unter „Einkaufsrechner nach Batch-Varianten“ zuerst die gewünschten Batch-Varianten hinzu.</div>';
+
+  summary.innerHTML=`<div class="sim-kpi"><div class="label">Batches in Bestellliste</div><div class="value">${distinctBatches.length}</div></div>
+    <div class="sim-kpi"><div class="label">Batch-Varianten</div><div class="value">${rows.length}</div></div>
+    <div class="sim-kpi"><div class="label">Bestellpositionen</div><div class="value">${cart.lines.length}</div></div>
+    <div class="sim-kpi"><div class="label">Warenkorb / Investition</div><div class="value">${euro(cart.totalCost)}</div></div>`;
+
+  stockEl.innerHTML=cart.lines.length
+    ?`<div class="table-wrap"><table class="sim-stock-table"><thead><tr><th>ID</th><th>Produkt / Verpackung</th><th>Bedarf</th><th>Bestellte Menge</th><th>Bestellwert</th><th>Quelle</th></tr></thead><tbody>
+      ${cart.lines.map(x=>`<tr>
+        <td><span class="idchip">${esc(x.id)}</span></td>
+        <td>${esc(x.name)}<div class="tiny">${esc(x.type)}</div></td>
+        <td>${Number.isInteger(x.needed)?x.needed:x.needed.toFixed(2)}</td>
+        <td>${x.missing?'–':(Number.isInteger(x.ordered)?x.ordered:x.ordered.toFixed(2))}</td>
+        <td class="money">${x.missing?'–':euro(x.cost)}</td>
+        <td class="tiny">${x.manual?'<strong>manuell</strong> · ':''}${esc(x.reason||'Bestellliste')}</td>
+      </tr>`).join('')}
+      </tbody></table></div>`
+    :'<div class="empty"><strong>Warenkorb leer</strong>Die Einkaufs-Simulation erzeugt keine eigene Bestellung mehr.</div>';
+
   if(!state.batches.length){results.innerHTML='<div class="muted">Noch keine Batches vorhanden.</div>';return}
-  const rows=state.batches.map(b=>({b,gap:simulationBatchGap(b,cart),selected:cart.selected.has(b.key)||selected.has(b.bid)})).sort((a,b)=>Number(b.gap.possible)-Number(a.gap.possible)||a.gap.extraCost-b.gap.extraCost||a.gap.missing.length-b.gap.missing.length||parseIdNumber(a.b.bid,'BID')-parseIdNumber(b.b.bid,'BID'));
-  results.innerHTML=`<div class="table-wrap"><table class="sim-result-table"><thead><tr><th>ID</th><th>Batch</th><th>Status / Fehlende Positionen</th><th>Zusätzlich nötig</th><th></th></tr></thead><tbody>${rows.map(({b,gap,selected})=>`<tr class="${gap.possible?'possible':''}"><td><span class="idchip">${esc(b.bid)}</span></td><td><div class="name">${esc(b.name)}</div>${selected?'<div class="tiny">ausgewählt</div>':''}</td><td>${gap.possible?'<span class="badge ready">✓ komplett möglich</span>':`<div><strong>${gap.missing.length} Position${gap.missing.length===1?'':'en'} fehlen</strong></div><div class="sim-missing">${gap.missing.map(m=>`<div class="missing-line"><span>${esc(m.id)} · ${esc(m.name)}</span><span>${m.missingSupplier?'kein Lieferant':euro(m.cost)}</span></div>`).join('')}</div>`}</td><td class="money ${gap.possible?'positive':''}">${gap.possible?'0,00 €':gap.missingSupplier?euro(gap.extraCost)+' + offen':euro(gap.extraCost)}</td><td>${selected?'':`<button type="button" class="btn secondary simulation-add-batch" data-key="${esc(b.key)}">+ mitbestellen</button>`}</td></tr>`).join('')}</tbody></table></div>`;
-  $$('.simulation-batch-check').forEach(c=>c.onchange=()=>{const set=new Set(state.simulationSelectedBatches||[]);c.checked?set.add(c.value):set.delete(c.value);state.simulationSelectedBatches=[...set];localStorage.setItem(STORAGE_KEY,JSON.stringify(state));renderShoppingSimulation();if(typeof renderInventoryEditor==='function'){renderInventoryEditor();renderInventoryResults()}});
-  $$('.simulation-add-batch').forEach(btn=>btn.onclick=()=>{const set=new Set(state.simulationSelectedBatches||[]);set.add(btn.dataset.key);state.simulationSelectedBatches=[...set];localStorage.setItem(STORAGE_KEY,JSON.stringify(state));renderShoppingSimulation();if(typeof renderInventoryEditor==='function'){renderInventoryEditor();renderInventoryResults()}});
+
+  const resultRows=state.batches.map(b=>({
+    b,gap:simulationBatchGap(b,cart),
+    selected:distinctBatches.includes(b.key)
+  })).sort((a,b)=>Number(b.gap.possible)-Number(a.gap.possible)||a.gap.extraCost-b.gap.extraCost||a.gap.missing.length-b.gap.missing.length||parseIdNumber(a.b.bid,'BID')-parseIdNumber(b.b.bid,'BID'));
+
+  results.innerHTML=`<div class="table-wrap"><table class="sim-result-table"><thead><tr><th>ID</th><th>Batch</th><th>Status / Fehlende Positionen</th><th>Zusätzlich nötig</th><th></th></tr></thead><tbody>
+    ${resultRows.map(({b,gap,selected})=>`<tr class="${gap.possible?'possible':''}">
+      <td><span class="idchip">${esc(b.bid)}</span></td>
+      <td><div class="name">${esc(b.name)}</div>${selected?'<div class="tiny">bereits in Bestellliste</div>':''}</td>
+      <td>${gap.possible?'<span class="badge ready">✓ mit aktueller Bestellliste möglich</span>':`<div><strong>${gap.missing.length} Position${gap.missing.length===1?'':'en'} fehlen</strong></div><div class="sim-missing">${gap.missing.map(m=>`<div class="missing-line"><span>${esc(m.id)} · ${esc(m.name)}</span><span>${m.missingSupplier?'kein Lieferant':euro(m.cost)}</span></div>`).join('')}</div>`}</td>
+      <td class="money ${gap.possible?'positive':''}">${gap.possible?'0,00 €':gap.missingSupplier?euro(gap.extraCost)+' + offen':euro(gap.extraCost)}</td>
+      <td>${selected?'':`<button type="button" class="btn secondary simulation-add-batch" data-key="${esc(b.key)}">+ Variante mitbestellen</button>`}</td>
+    </tr>`).join('')}
+    </tbody></table></div>`;
+
+  $$('.simulation-add-batch').forEach(btn=>btn.onclick=()=>{
+    ensureSalesPlanning();
+    const b=state.batches.find(x=>x.key===btn.dataset.key);
+    if(!b)return;
+    const variant=batchSaleVariants(b)[0]?.name||'';
+    state.salesPlanning.purchaseRows.push({key:crypto.randomUUID(),batchKey:b.key,variant,qty:1});
+    persistSalesPlanning();
+    if(typeof renderPurchaseCalcRows==='function')renderPurchaseCalcRows();
+    if(typeof renderPurchaseCalc==='function')renderPurchaseCalc();
+    renderShoppingSimulation();
+    if(typeof renderForecastAll==='function')renderForecastAll()
+  })
 }
 
 
@@ -222,64 +303,25 @@ function applyInventoryFirstOrder(){
 
 function applyInventoryFromSelectedShoppingSimulation(){
   ensureInventorySimulationState();
+  const cart=simulationBuildCart(),status=$('#inventoryActionStatus');
 
-  const selectedIds=new Set(state.simulationSelectedBatches||[]);
-  const selected=state.batches.filter(b=>selectedIds.has(b.key)||selectedIds.has(b.bid));
-
-  const status=$('#inventoryActionStatus');
-
-  if(!selected.length){
-    if(status)status.textContent='⚠ Keine Batches in der Einkaufssimulation ausgewählt';
+  if(!cart.lines.length){
+    if(status)status.textContent='⚠ Bestellliste im Einkaufsrechner ist leer';
     return
   }
 
-  const pidNeed=new Map(),vidNeed=new Map();
-
-  selected.forEach(b=>{
-    (b.items||[]).forEach(i=>{
-      if(!i.pid)return;
-      pidNeed.set(i.pid,(pidNeed.get(i.pid)||0)+Math.max(1,num(i.qty,1)))
-    });
-    (b.packagingItems||[]).forEach(i=>{
-      if(!i.vid)return;
-      vidNeed.set(i.vid,(vidNeed.get(i.vid)||0)+Math.max(.001,num(i.qty,1)))
-    })
-  });
-
-  // Start bewusst leer: Nur Artikel der ausgewählten Batches werden übernommen.
   state.inventorySimulation.stock={};
-
   let positions=0;
-
-  pidNeed.forEach((needed,id)=>{
-    const p=state.products.find(x=>x.pid===id),
-      s=(p?.suppliers||[]).find(x=>x.preferred)||(p?.suppliers||[])[0];
-    if(!s)return;
-    const base=Math.max(.001,supplierQtyBase(s)),
-      packs=Math.ceil(needed/base),
-      ordered=packs*base;
-    state.inventorySimulation.stock[id]=ordered;
-    positions++
-  });
-
-  vidNeed.forEach((needed,id)=>{
-    const v=state.packaging.find(x=>x.vid===id),
-      s=preferredPackagingSupplier(v);
-    if(!s)return;
-    const base=Math.max(.001,supplierQtyBase(s)),
-      packs=Math.ceil(needed/base),
-      ordered=packs*base;
-    state.inventorySimulation.stock[id]=ordered;
+  cart.lines.forEach(line=>{
+    if(line.missing||line.ordered<=0)return;
+    state.inventorySimulation.stock[line.id]=Math.max(0,num(line.ordered));
     positions++
   });
 
   saveInventorySimulation();
   renderInventoryEditor();
   renderInventoryResults();
-
-  if(status){
-    status.textContent='✓ 1. AK übernommen: '+selected.map(b=>b.bid).join(', ')+' · '+positions+' Positionen'
-  }
+  if(status)status.textContent='✓ Bestand aus aktueller Bestellliste übernommen · '+positions+' Positionen'
 }
 window.applyInventoryFromSelectedShoppingSimulation=applyInventoryFromSelectedShoppingSimulation;
 
@@ -409,8 +451,20 @@ function salesGrowthOrderForNeed(kind,id,neededQty){
   return{kind,id,name:x.name,neededQty:needed,baseQty:plannedMin,packs:1,orderedQty,cost,missing:false,orderMode:'fallback'}
 }
 function salesGrowthInitialPurchase(b){
+  // If there is an editable central order list, use it as the actual start
+  // investment instead of inventing a second "1. AK" for the selected source batch.
+  if(typeof calcPurchasePlan==='function'&&(state.salesPlanning?.purchaseRows||[]).length){
+    const p=calcPurchasePlan(false);
+    const lines=(p.groupPlans||[]).map(g=>({
+      kind:g.kind,id:g.id,name:warehouseItemName(g.kind,g.id),
+      neededQty:g.totalNeed,baseQty:g.moq||0,packs:g.sets||1,
+      orderedQty:g.ordered,cost:g.cost,missing:g.missingSupplier||g.impossible,
+      orderMode:g.manualActive?'manual-list':'central-order-list'
+    }));
+    return{lines,total:p.total,missing:p.missing,fromCentralList:true}
+  }
   const lines=salesGrowthBatchNeeds(b).map(n=>salesGrowthOrderForNeed(n.kind,n.id,n.qty));
-  return{lines,total:lines.reduce((a,x)=>a+x.cost,0),missing:lines.some(x=>x.missing)}
+  return{lines,total:lines.reduce((a,x)=>a+x.cost,0),missing:lines.some(x=>x.missing),fromCentralList:false}
 }
 function salesGrowthIncrementalPurchaseForBatch(b,stock){
   const lines=salesGrowthBatchNeeds(b).map(n=>{
