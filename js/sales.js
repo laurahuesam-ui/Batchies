@@ -515,6 +515,7 @@ function bookedSalesTrend(){
 }
 function forecastWeeklyTotalAt(week){
   ensureSalesPlanning();
+  if(!forecastActiveVariants().length)return 0;
   week=Math.max(1,num(week,1));
   if(hasAnyBookedSale()){
     const base=Math.max(0,totalActualSalesLast8Weeks()),trend=bookedSalesTrend()||0;
@@ -572,7 +573,8 @@ function allConfiguredVariants(){
 }
 function forecastGrowthSummary(){
   const horizon=currentForecastWeeks(),
-    at=week=>forecastWeeklyTotalAt(Math.max(1,week)),
+    hasAssortment=forecastActiveVariants().length>0,
+    at=week=>hasAssortment?forecastWeeklyTotalAt(Math.max(1,week)):0,
     start=at(1),
     month3=at(13),
     month6=at(26),
@@ -588,7 +590,7 @@ function forecastNumber(n,digits=2){
 function renderForecastVariantRates(){
   const el=$('#forecastVariantRates');if(!el)return;
   ensureSalesPlanning();
-  const vars=allConfiguredVariants(),hasSales=hasAnyBookedSale(),actualTotal=totalActualSalesLast8Weeks(),total=hasSales?actualTotal:forecastScenarioTotal(),g=forecastGrowthSummary(),period=forecastPeriodLabel();
+  const vars=forecastActiveVariants(),hasSales=hasAnyBookedSale(),actualTotal=vars.reduce((sum,x)=>sum+actualWeeklyRate(x.b.key,x.variant),0),total=hasSales?actualTotal:forecastScenarioTotal(),g=forecastGrowthSummary(),period=forecastPeriodLabel();
   el.innerHTML=`<div class="info"><strong>${hasSales?'Dynamische Prognose aus gebuchten Verkäufen':'Dynamische Startprognose'}</strong><br>${hasSales?'Die letzten 8 Wochen bilden die Basis. Der jüngste 4-Wochen-Trend wird gedämpft fortgeschrieben, damit Wachstum oder Rückgang berücksichtigt wird, ohne unrealistisch zu explodieren.':'Ein neuer Shop startet bewusst niedriger. Reichweite, Bewertungen und Social Proof werden als allmählicher Wachstumseffekt modelliert. Vorsichtig, Realistisch und Gut haben unterschiedliche Wachstumskurven und Obergrenzen.'}</div>
   <div class="forecast-growth-overview">
     <div class="production-kpi"><div class="label">Start</div><div class="value">${forecastNumber(g.start)} / Woche</div></div>
@@ -603,7 +605,7 @@ function renderForecastVariantRates(){
     <div><strong>${esc(x.b.bid)} · ${esc(x.variant)}</strong></div>
     <div class="rowline"><span class="tiny">Gewichtung</span><input class="forecast-rate-input" data-key="${esc(x.key)}" type="number" min="0" step="0.1" value="${forecastVariantWeight(x.b.key,x.variant)}"></div>
     <div class="tiny">Start: ${planningRateAt(x.b.key,x.variant,1).toFixed(2).replace('.',',')} / Woche · Ist letzte 8 Wochen: ${actualWeeklyRate(x.b.key,x.variant).toFixed(2).replace('.',',')}</div>
-  </div>`).join('')}</div>`:'<div class="empty"><strong>Keine Verkaufsvarianten angelegt</strong></div>'}`;
+  </div>`).join('')}</div>`:'<div class="empty"><strong>Keine Varianten im Einkaufsrechner ausgewählt</strong><div class="tiny">Füge zuerst unter „Einkaufsrechner nach Batch-Varianten“ die Batches/Farben hinzu, die in der Prognose berücksichtigt werden sollen.</div></div>'}`;
   $$('.forecast-rate-input').forEach(inp=>inp.onchange=()=>{state.salesPlanning.variantRates[inp.dataset.key]=Math.max(0,num(inp.value));persistSalesPlanning();renderForecastAll()})
 }
 function purchaseCalcAddRow(row=null){
@@ -807,24 +809,20 @@ function renderPurchaseCalc(){
 function forecastActiveVariants(){
   ensureSalesPlanning();
 
-  // The purchase calculator is the explicit assortment selection for the forecast.
-  // Once a variant is selected there, it remains part of expected demand even if
-  // its current stock reaches zero. Otherwise shortages would disappear instead
-  // of being reported/reordered.
-  if(state.salesPlanning.purchaseRows.length){
-    const seen=new Set(),out=[];
-    state.salesPlanning.purchaseRows.forEach(r=>{
-      const k=planningVariantKey(r.batchKey,r.variant);
-      if(seen.has(k))return;
-      const b=state.batches.find(x=>x.key===r.batchKey);
-      if(b&&selectedBatchSaleVariant(b,r.variant)){
-        seen.add(k);out.push({b,variant:r.variant,key:k})
-      }
-    });
-    if(out.length)return out
-  }
-
-  return allConfiguredVariants()
+  // SINGLE SOURCE OF TRUTH:
+  // Only batch variants explicitly listed in "Einkaufsrechner nach Batch-Varianten"
+  // participate in sales forecast, stock consumption, reorders, reinvestment and BE.
+  // An empty purchase calculator therefore means an empty forecast assortment.
+  const seen=new Set(),out=[];
+  (state.salesPlanning.purchaseRows||[]).forEach(r=>{
+    const k=planningVariantKey(r.batchKey,r.variant);
+    if(seen.has(k))return;
+    const b=state.batches.find(x=>x.key===r.batchKey);
+    if(b&&selectedBatchSaleVariant(b,r.variant)){
+      seen.add(k);out.push({b,variant:r.variant,key:k})
+    }
+  });
+  return out
 }
 function weeklyRequirements(week=1){
   const map=new Map();
