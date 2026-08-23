@@ -90,14 +90,19 @@ function renderBatchProductionPlan(b){
   ${productionLinesHtml(p.productLines,'Produkte (PID)')}${productionLinesHtml(p.packagingLines,'Verpackung (VID)')}`;
   const h=$('#batchPlanHorizon');if(h)h.oninput=()=>renderBatchProductionPlan(b)
 }
+function batchVariantDot(name){
+  const canonical=canonicalBatchColor(name),
+    c=PRODUCT_COLOR_MAP[canonical],
+    hex=(c&&typeof c.hex==='string'&&c.hex.trim())?c.hex:'#b8b8b8';
+  return `<span class="product-color-dot batch-sale-color-dot" style="background:${esc(hex)}!important;--dot:${esc(hex)}" title="${esc(canonical)}" aria-label="${esc(canonical)}"></span>`
+}
 function batchVariantDots(b,compact=true){
-  const names=[...new Set((b?.saleVariants||[]).map(v=>String(v?.name||'').trim()).filter(Boolean))];
-  if(!names.length)return '<span class="tiny">keine Verkaufsvariante</span>';
-  return `<div class="product-color-dots${compact?' compact':''}" aria-label="Verkaufsfarben">${names.map(name=>{
-    const c=PRODUCT_COLOR_MAP[name];
-    const hex=(c&&typeof c.hex==='string'&&c.hex.trim())?c.hex:'#b8b8b8';
-    return `<span class="product-color-dot batch-sale-color-dot" style="background:${esc(hex)}!important;--dot:${esc(hex)}" title="${esc(name)}" aria-label="${esc(name)}"></span>`
-  }).join('')}</div>`
+  const variants=sortBatchVariants((b?.saleVariants||[]).filter(v=>String(v?.name||'').trim())),
+    mains=variants.filter(v=>v.variantType!=='combo'),
+    combos=variants.filter(v=>v.variantType==='combo');
+  if(!variants.length)return '<span class="tiny">keine Verkaufsvariante</span>';
+  const group=(label,list,cls)=>list.length?`<div class="batch-variant-dot-group ${cls}"><span class="batch-variant-group-label">${esc(label)}</span><div class="product-color-dots${compact?' compact':''}" aria-label="${esc(label)}">${list.map(v=>batchVariantDot(v.name)).join('')}</div></div>`:'';
+  return `<div class="batch-variant-groups">${group('Hauptvarianten',mains,'main')}${group('Farbkombis',combos,'combo')}</div>`
 }
 function renderBatches(){
   state.batches.forEach(b=>{
@@ -191,18 +196,49 @@ function bindBatchPackagingEvents(){
   }))
 }
 
+function batchColorRank(name){
+  const n=normalizeText(name);
+  const i=PRODUCT_COLORS.findIndex(c=>normalizeText(c.name)===n);
+  return i>=0?i:PRODUCT_COLORS.length+100
+}
+function sortBatchColorsLikeDropdown(colors=[]){
+  return [...new Set((colors||[]).filter(Boolean))].sort((a,b)=>{
+    const ra=batchColorRank(a),rb=batchColorRank(b);
+    return ra-rb||String(a).localeCompare(String(b),'de',{sensitivity:'base'})
+  })
+}
+function canonicalBatchColor(name){
+  const n=normalizeText(name);
+  return PRODUCT_COLORS.find(c=>normalizeText(c.name)===n)?.name||String(name||'')
+}
+function batchVariantSortKey(v){
+  const type=v?.variantType==='combo'?'combo':'main',
+    color=canonicalBatchColor(v?.name||'');
+  return {group:type==='main'?0:1,colorRank:batchColorRank(color),name:normalizeText(v?.name||'')}
+}
+function sortBatchVariants(variants=[]){
+  return [...(variants||[])].sort((a,b)=>{
+    const A=batchVariantSortKey(a),B=batchVariantSortKey(b);
+    return A.group-B.group||A.colorRank-B.colorRank||A.name.localeCompare(B.name,'de')
+  })
+}
 function batchVariantProductOptions(pid,selected=''){
-  const p=state.products.find(x=>x.pid===pid),colors=normalizeProductColors(p?.colors);
-  return `<option value="">Ohne Farbe / neutral</option>`+colors.map(c=>`<option value="${esc(c)}" ${c===selected?'selected':''}>${esc(c)}</option>`).join('')
+  const p=state.products.find(x=>x.pid===pid),
+    colors=sortBatchColorsLikeDropdown(normalizeProductColors(p?.colors));
+  return `<option value="">Ohne Farbe / neutral</option>`+colors.map(c=>`<option value="${esc(c)}" ${normalizeText(c)===normalizeText(selected)?'selected':''}>${esc(c)}</option>`).join('')
 }
 function batchVariantNameOptions(pids,selected='',vids=[]){
-  const colors=[...new Set([...(pids||[]).flatMap(pid=>normalizeProductColors(state.products.find(x=>x.pid===pid)?.colors)),...(vids||[]).flatMap(vid=>normalizeProductColors(state.packaging.find(x=>x.vid===vid)?.colors))])];
-  if(selected&&!colors.includes(selected))colors.push(selected);
-  return `<option value="">Farbe auswählen …</option>`+colors.map(c=>`<option value="${esc(c)}" ${c===selected?'selected':''}>${esc(c)}</option>`).join('')
+  const colors=sortBatchColorsLikeDropdown([
+    ...(pids||[]).flatMap(pid=>normalizeProductColors(state.products.find(x=>x.pid===pid)?.colors)),
+    ...(vids||[]).flatMap(vid=>normalizeProductColors(state.packaging.find(x=>x.vid===vid)?.colors))
+  ]);
+  const canonicalSelected=canonicalBatchColor(selected);
+  if(selected&&!colors.some(c=>normalizeText(c)===normalizeText(selected)))colors.push(selected);
+  return `<option value="">Farbe auswählen …</option>`+colors.map(c=>`<option value="${esc(c)}" ${normalizeText(c)===normalizeText(canonicalSelected)?'selected':''}>${esc(c)}</option>`).join('')
 }
 function addBatchVariantRow(v=null){
   const host=$('#batchVariantRows');if(!host)return;
-  const key=v?.key||crypto.randomUUID(),name=v?.name||'',pc=v?.productColors||{},vc=v?.packagingColors||{};
+  const key=v?.key||crypto.randomUUID(),name=v?.name||'',variantType=v?.variantType==='combo'?'combo':'main',pc=v?.productColors||{},vc=v?.packagingColors||{};
   const products=$$('#batchItemRows .batch-product-row').map(r=>r.querySelector('.batch-product')?.value).filter(Boolean),
     packaging=$$('#batchPackagingRows .batch-packaging-row').map(r=>r.querySelector('.batch-packaging')?.value).filter(Boolean);
   const coloredPackaging=packaging.filter(vid=>normalizeProductColors(state.packaging.find(x=>x.vid===vid)?.colors).length>0),
@@ -210,9 +246,14 @@ function addBatchVariantRow(v=null){
   products.forEach(pid=>{if(!pc[pid]&&variantDefault&&normalizeProductColors(state.products.find(x=>x.pid===pid)?.colors).includes(variantDefault))pc[pid]=variantDefault});
   coloredPackaging.forEach(vid=>{if(!vc[vid]&&variantDefault&&normalizeProductColors(state.packaging.find(x=>x.vid===vid)?.colors).includes(variantDefault))vc[vid]=variantDefault});
   host.insertAdjacentHTML('beforeend',`<div class="batch-variant-card" data-key="${esc(key)}">
-    <div class="batch-variant-head"><div class="field"><label>Verkaufsfarbe</label><select class="batch-variant-name">${batchVariantNameOptions(products,name,packaging)}</select></div><button type="button" class="iconbtn remove-batch-variant">✕</button></div>
+    <div class="batch-variant-head">
+      <div class="field"><label>Verkaufsfarbe</label><select class="batch-variant-name">${batchVariantNameOptions(products,name,packaging)}</select></div>
+      <div class="field batch-variant-type-field"><label>Typ</label><select class="batch-variant-type"><option value="main" ${variantType==='main'?'selected':''}>Hauptvariante</option><option value="combo" ${variantType==='combo'?'selected':''}>Farbkombi</option></select></div>
+      <span class="batch-variant-type-badge ${variantType==='combo'?'combo':'main'}">${variantType==='combo'?'Farbkombi':'Hauptvariante'}</span>
+      <button type="button" class="iconbtn remove-batch-variant">✕</button>
+    </div>
     <div class="batch-variant-products">${products.map(pid=>{const p=state.products.find(x=>x.pid===pid);return `<div class="batch-variant-product" data-pid="${esc(pid)}"><div class="tiny"><strong>${esc(pid)}</strong> · ${esc(p?.name||pid)}</div><label>Farbe in dieser Variante</label><select class="batch-variant-product-color">${batchVariantProductOptions(pid,pc[pid]||'')}</select></div>`}).join('')}</div>
-    ${coloredPackaging.length?`<div class="tiny" style="font-weight:800;margin-top:8px">Verpackung / Versand (VID)</div><div class="batch-variant-packaging">${coloredPackaging.map(vid=>{const x=state.packaging.find(v=>v.vid===vid),colors=normalizeProductColors(x?.colors);return `<div class="batch-variant-packaging-item" data-vid="${esc(vid)}"><div class="tiny"><strong>${esc(vid)}</strong> · ${esc(x?.name||vid)}</div><label>Farbe in dieser Variante</label><select class="batch-variant-packaging-color"><option value="">Ohne Farbe / neutral</option>${colors.map(c=>`<option value="${esc(c)}" ${c===(vc[vid]||'')?'selected':''}>${esc(c)}</option>`).join('')}</select></div>`}).join('')}</div>`:''}
+    ${coloredPackaging.length?`<div class="tiny" style="font-weight:800;margin-top:8px">Verpackung / Versand (VID)</div><div class="batch-variant-packaging">${coloredPackaging.map(vid=>{const x=state.packaging.find(v=>v.vid===vid),colors=sortBatchColorsLikeDropdown(normalizeProductColors(x?.colors));return `<div class="batch-variant-packaging-item" data-vid="${esc(vid)}"><div class="tiny"><strong>${esc(vid)}</strong> · ${esc(x?.name||vid)}</div><label>Farbe in dieser Variante</label><select class="batch-variant-packaging-color"><option value="">Ohne Farbe / neutral</option>${colors.map(c=>`<option value="${esc(c)}" ${c===(vc[vid]||'')?'selected':''}>${esc(c)}</option>`).join('')}</select></div>`}).join('')}</div>`:''}
   </div>`);
   const card=host.lastElementChild;
   bindBatchVariantEvents();
@@ -238,8 +279,14 @@ function applyBatchVariantMainColor(card){
 }
 function bindBatchVariantEvents(){
   $$('#batchVariantRows .batch-variant-card').forEach(card=>{
-    const main=card.querySelector('.batch-variant-name');
-    if(main)main.onchange=()=>applyBatchVariantMainColor(card);
+    const main=card.querySelector('.batch-variant-name'),
+      type=card.querySelector('.batch-variant-type'),
+      badge=card.querySelector('.batch-variant-type-badge');
+    if(main)main.onchange=()=>{applyBatchVariantMainColor(card);sortBatchVariantCardsInEditor()};
+    if(type)type.onchange=()=>{
+      if(badge){badge.textContent=type.value==='combo'?'Farbkombi':'Hauptvariante';badge.className='batch-variant-type-badge '+(type.value==='combo'?'combo':'main')}
+      sortBatchVariantCardsInEditor()
+    };
     card.querySelectorAll('.batch-variant-product-color,.batch-variant-packaging-color').forEach(sel=>{
       sel.onchange=()=>{sel.dataset.autoColor=''}
     });
@@ -247,18 +294,28 @@ function bindBatchVariantEvents(){
     if(remove)remove.onclick=()=>card.remove()
   })
 }
+function readBatchVariantCard(card){
+  const productColors={},packagingColors={};
+  card.querySelectorAll('.batch-variant-product').forEach(row=>{productColors[row.dataset.pid]=row.querySelector('.batch-variant-product-color')?.value||''});
+  card.querySelectorAll('.batch-variant-packaging-item').forEach(row=>{packagingColors[row.dataset.vid]=row.querySelector('.batch-variant-packaging-color')?.value||''});
+  return{key:card.dataset.key||crypto.randomUUID(),name:canonicalBatchColor(card.querySelector('.batch-variant-name')?.value||''),variantType:card.querySelector('.batch-variant-type')?.value==='combo'?'combo':'main',productColors,packagingColors}
+}
+function sortBatchVariantCardsInEditor(){
+  const host=$('#batchVariantRows');if(!host)return;
+  const cards=$$('#batchVariantRows .batch-variant-card');
+  cards.sort((a,b)=>{
+    const A=batchVariantSortKey(readBatchVariantCard(a)),B=batchVariantSortKey(readBatchVariantCard(b));
+    return A.group-B.group||A.colorRank-B.colorRank||A.name.localeCompare(B.name,'de')
+  }).forEach(card=>host.appendChild(card))
+}
 function renderBatchVariants(variants=[]){
   const host=$('#batchVariantRows');if(!host)return;host.innerHTML='';
-  (variants||[]).forEach(v=>addBatchVariantRow(v));
-  bindBatchVariantEvents()
+  sortBatchVariants(variants||[]).forEach(v=>addBatchVariantRow(v));
+  bindBatchVariantEvents();
+  sortBatchVariantCardsInEditor()
 }
 function collectBatchVariants(){
-  return $$('#batchVariantRows .batch-variant-card').map(card=>{
-    const productColors={},packagingColors={};
-    card.querySelectorAll('.batch-variant-product').forEach(row=>{productColors[row.dataset.pid]=row.querySelector('.batch-variant-product-color')?.value||''});
-    card.querySelectorAll('.batch-variant-packaging-item').forEach(row=>{packagingColors[row.dataset.vid]=row.querySelector('.batch-variant-packaging-color')?.value||''});
-    return{key:card.dataset.key||crypto.randomUUID(),name:card.querySelector('.batch-variant-name')?.value||'',productColors,packagingColors}
-  })
+  return sortBatchVariants($$('#batchVariantRows .batch-variant-card').map(readBatchVariantCard))
 }
 function refreshBatchVariantProducts(){
   const current=collectBatchVariants();
