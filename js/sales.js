@@ -527,14 +527,23 @@ function forecastWeeklyTotalAt(week){
   return Math.min(g.cap,base*Math.pow(1+g.monthly,(week-1)/4.345))
 }
 function planningRateAt(batchKey,variant,week){
-  const vars=allConfiguredVariants();
+  // The total weekly forecast belongs to the ACTUAL assortment used by the
+  // purchase/warehouse forecast, not to every variant that happens to exist.
+  const active=forecastActiveVariants(),
+    key=planningVariantKey(batchKey,variant),
+    current=active.find(x=>x.key===key);
+  if(!current)return 0;
+
   if(hasAnyBookedSale()){
-    const actualTotal=Math.max(0,totalActualSalesLast8Weeks());
+    const actualTotal=active.reduce((sum,x)=>sum+actualWeeklyRate(x.b.key,x.variant),0);
     if(actualTotal<=0)return 0;
     return forecastWeeklyTotalAt(week)*(actualWeeklyRate(batchKey,variant)/actualTotal)
   }
-  const sumWeights=vars.reduce((a,x)=>a+forecastVariantWeight(x.b.key,x.variant),0);
-  return sumWeights>0?forecastWeeklyTotalAt(week)*forecastVariantWeight(batchKey,variant)/sumWeights:0
+
+  const sumWeights=active.reduce((sum,x)=>sum+forecastVariantWeight(x.b.key,x.variant),0);
+  return sumWeights>0
+    ? forecastWeeklyTotalAt(week)*forecastVariantWeight(batchKey,variant)/sumWeights
+    : 0
 }
 function totalActualSalesLast8Weeks(){
   return allConfiguredVariants().reduce((a,x)=>a+actualWeeklyRate(x.b.key,x.variant),0)
@@ -1120,7 +1129,8 @@ function runRealReinvestmentForecast(horizonOverride=null){
 
     // 3) Expected sales for the week.
     active.forEach(x=>{
-      const rate=planningRate(x.b.key,x.variant);if(rate<=0)return;
+      // Use the exact dynamic rate for THIS week (same curve as the forecast UI).
+      const rate=planningRateAt(x.b.key,x.variant,week);if(rate<=0)return;
       expectedDemand+=rate;
       const requirements=saleRequirements(x.b,x.variant,1);
       let feasible=rate;
@@ -1217,7 +1227,7 @@ function renderRealReinvestmentForecast(){
     <div class="production-kpi"><div class="label">Bisher echtes Einkaufskapital</div><div class="value">${euro(capital)}</div></div>
     <div class="production-kpi"><div class="label">Bisheriger Rückfluss aus Verkäufen</div><div class="value">${euro(recovered)}</div></div>
     <div class="production-kpi"><div class="label">Break-even-Punkt</div><div class="value">${beText}</div><div class="tiny">${beReached?`${beSales} simulierte Verkäufe bis dahin · freies Geld ab dann ${euro(be.breakEvenCash)}`:`auch nach ${be.searchWeeks} Wochen nicht positiv`}</div></div>
-    <div class="production-kpi"><div class="label">Erwartete Nachfrage (${period})</div><div class="value">${r.expectedDemand.toFixed(1)}</div><div class="tiny">${forecastNumber(r.weeklyTarget)} / Woche Start → ${forecastNumber(r.weeklyTargetEnd)} / Woche Ende · Ø ${forecastNumber(r.expectedDemand/Math.max(1,currentForecastWeeks()))} / Woche</div></div>
+    <div class="production-kpi"><div class="label">Erwartete Nachfrage (${period})</div><div class="value">${r.expectedDemand.toFixed(1)}</div><div class="tiny">${forecastNumber(r.weeklyTarget)} / Woche Start → ${forecastNumber(r.weeklyTargetEnd)} / Woche Ende · Ø ${forecastNumber(r.expectedDemand/Math.max(1,currentForecastWeeks()))} / Woche · identische Wachstumskurve wie oben</div></div>
     <div class="production-kpi"><div class="label">Voraussichtlich lieferbar</div><div class="value">${r.totalForecastSales.toFixed(1)}</div><div class="tiny">${r.expectedDemand>0?(r.totalForecastSales/r.expectedDemand*100).toFixed(1).replace('.',','):'0,0'} % der erwarteten Nachfrage</div></div>
     <div class="production-kpi"><div class="label">Gefährdet / nicht lieferbar</div><div class="value">${r.lostSales.toFixed(1)}</div><div class="tiny">${r.expectedDemand>0?(r.lostSales/r.expectedDemand*100).toFixed(1).replace('.',','):'0,0'} % der erwarteten Nachfrage</div></div>
     <div class="production-kpi"><div class="label">Simulierte Nachbestellungen</div><div class="value">${euro(r.reorderCost)}</div><div class="tiny">${r.totalReorders} Bestellpakete</div></div>
