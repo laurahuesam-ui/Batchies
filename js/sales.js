@@ -561,11 +561,35 @@ function allConfiguredVariants(){
   (state.batches||[]).forEach(b=>batchSaleVariants(b).forEach(v=>out.push({b,variant:v.name,key:planningVariantKey(b.key,v.name)})));
   return out
 }
+function forecastGrowthSummary(){
+  const horizon=currentForecastWeeks(),
+    at=week=>forecastWeeklyTotalAt(Math.max(1,week)),
+    start=at(1),
+    month3=at(13),
+    month6=at(26),
+    month12=at(52),
+    end=at(horizon);
+  let total=0;
+  for(let week=1;week<=horizon;week++)total+=at(week);
+  return{horizon,start,month3,month6,month12,end,total,average:horizon?total/horizon:0}
+}
+function forecastNumber(n,digits=2){
+  return num(n).toFixed(digits).replace('.',',')
+}
 function renderForecastVariantRates(){
   const el=$('#forecastVariantRates');if(!el)return;
   ensureSalesPlanning();
-  const vars=allConfiguredVariants(),hasSales=hasAnyBookedSale(),actualTotal=totalActualSalesLast8Weeks(),total=hasSales?actualTotal:forecastScenarioTotal(),endTotal=forecastWeeklyTotalAt(currentForecastWeeks());
-  el.innerHTML=`<div class="info"><strong>${hasSales?'Dynamische Prognose aus gebuchten Verkäufen':'Dynamische Startprognose'}: ${total.toFixed(2).replace('.',',')} Verkäufe/Woche zum Start → ca. ${endTotal.toFixed(2).replace('.',',')} / Woche am Prognoseende</strong><br>${hasSales?'Die letzten 8 Wochen bilden die Basis. Der jüngste 4-Wochen-Trend wird gedämpft fortgeschrieben, damit Wachstum oder Rückgang berücksichtigt wird, ohne unrealistisch zu explodieren.':'Ein neuer Shop startet bewusst niedriger. Reichweite, Bewertungen und Social Proof werden als allmählicher Wachstumseffekt modelliert. Vorsichtig, Realistisch und Gut haben unterschiedliche Wachstumskurven und Obergrenzen.'}</div>
+  const vars=allConfiguredVariants(),hasSales=hasAnyBookedSale(),actualTotal=totalActualSalesLast8Weeks(),total=hasSales?actualTotal:forecastScenarioTotal(),g=forecastGrowthSummary(),period=forecastPeriodLabel();
+  el.innerHTML=`<div class="info"><strong>${hasSales?'Dynamische Prognose aus gebuchten Verkäufen':'Dynamische Startprognose'}</strong><br>${hasSales?'Die letzten 8 Wochen bilden die Basis. Der jüngste 4-Wochen-Trend wird gedämpft fortgeschrieben, damit Wachstum oder Rückgang berücksichtigt wird, ohne unrealistisch zu explodieren.':'Ein neuer Shop startet bewusst niedriger. Reichweite, Bewertungen und Social Proof werden als allmählicher Wachstumseffekt modelliert. Vorsichtig, Realistisch und Gut haben unterschiedliche Wachstumskurven und Obergrenzen.'}</div>
+  <div class="forecast-growth-overview">
+    <div class="production-kpi"><div class="label">Start</div><div class="value">${forecastNumber(g.start)} / Woche</div></div>
+    <div class="production-kpi"><div class="label">nach 3 Monaten</div><div class="value">${forecastNumber(g.month3)} / Woche</div></div>
+    <div class="production-kpi"><div class="label">nach 6 Monaten</div><div class="value">${forecastNumber(g.month6)} / Woche</div></div>
+    <div class="production-kpi"><div class="label">nach 12 Monaten</div><div class="value">${forecastNumber(g.month12)} / Woche</div></div>
+    <div class="production-kpi"><div class="label">Ende · ${esc(period)}</div><div class="value">${forecastNumber(g.end)} / Woche</div></div>
+    <div class="production-kpi"><div class="label">Ø im Zeitraum</div><div class="value">${forecastNumber(g.average)} / Woche</div></div>
+    <div class="production-kpi"><div class="label">Erwartete Verkäufe gesamt</div><div class="value">${forecastNumber(g.total,1)}</div><div class="tiny">Summe der dynamischen Wochenprognosen über ${g.horizon} Wochen</div></div>
+  </div>
   ${vars.length?`<div class="forecast-rate-grid">${vars.map(x=>`<div class="forecast-rate-card">
     <div><strong>${esc(x.b.bid)} · ${esc(x.variant)}</strong></div>
     <div class="rowline"><span class="tiny">Gewichtung</span><input class="forecast-rate-input" data-key="${esc(x.key)}" type="number" min="0" step="0.1" value="${forecastVariantWeight(x.b.key,x.variant)}"></div>
@@ -1193,7 +1217,7 @@ function renderRealReinvestmentForecast(){
     <div class="production-kpi"><div class="label">Bisher echtes Einkaufskapital</div><div class="value">${euro(capital)}</div></div>
     <div class="production-kpi"><div class="label">Bisheriger Rückfluss aus Verkäufen</div><div class="value">${euro(recovered)}</div></div>
     <div class="production-kpi"><div class="label">Break-even-Punkt</div><div class="value">${beText}</div><div class="tiny">${beReached?`${beSales} simulierte Verkäufe bis dahin · freies Geld ab dann ${euro(be.breakEvenCash)}`:`auch nach ${be.searchWeeks} Wochen nicht positiv`}</div></div>
-    <div class="production-kpi"><div class="label">Erwartete Nachfrage (${period})</div><div class="value">${r.expectedDemand.toFixed(1)}</div><div class="tiny">${r.weeklyTarget.toFixed(2).replace('.',',')} Verkäufe/Woche insgesamt</div></div>
+    <div class="production-kpi"><div class="label">Erwartete Nachfrage (${period})</div><div class="value">${r.expectedDemand.toFixed(1)}</div><div class="tiny">${forecastNumber(r.weeklyTarget)} / Woche Start → ${forecastNumber(r.weeklyTargetEnd)} / Woche Ende · Ø ${forecastNumber(r.expectedDemand/Math.max(1,currentForecastWeeks()))} / Woche</div></div>
     <div class="production-kpi"><div class="label">Voraussichtlich lieferbar</div><div class="value">${r.totalForecastSales.toFixed(1)}</div><div class="tiny">${r.expectedDemand>0?(r.totalForecastSales/r.expectedDemand*100).toFixed(1).replace('.',','):'0,0'} % der erwarteten Nachfrage</div></div>
     <div class="production-kpi"><div class="label">Gefährdet / nicht lieferbar</div><div class="value">${r.lostSales.toFixed(1)}</div><div class="tiny">${r.expectedDemand>0?(r.lostSales/r.expectedDemand*100).toFixed(1).replace('.',','):'0,0'} % der erwarteten Nachfrage</div></div>
     <div class="production-kpi"><div class="label">Simulierte Nachbestellungen</div><div class="value">${euro(r.reorderCost)}</div><div class="tiny">${r.totalReorders} Bestellpakete</div></div>
