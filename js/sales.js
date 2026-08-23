@@ -971,15 +971,14 @@ function runRealReinvestmentForecast(horizonOverride=null){
 
   let stock=cloneForecastStock(),
     cash=actualRecoveredCash()-reconstructedActualPurchaseCapital(),
-    initialCash=cash,
     events=[],
-    pendingOrders=[],
-    breakEvenWeek=cash>=0?0:null,
-    breakEvenSales=cash>=0?0:null,
-    breakEvenCash=cash>=0?cash:null;
+    pendingOrders=[];
 
-  const hasRealStock=(state.realWarehouse||[]).length>0;
+  const hasRealStock=(state.realWarehouse||[]).length>0,
+    realCapital=reconstructedActualPurchaseCapital();
 
+  // If no real warehouse/purchases exist yet, the forecast must first buy the
+  // virtual initial stock. Break-even is evaluated only AFTER this investment.
   if(!hasRealStock){
     const plan=calcPurchasePlan(false);
     cash-=plan.total;
@@ -993,7 +992,14 @@ function runRealReinvestmentForecast(horizonOverride=null){
     })
   }
 
-  const horizon=horizonOverride===null?currentForecastWeeks():Math.max(1,Math.floor(num(horizonOverride,currentForecastWeeks()))),
+  const initialCash=cash,
+    hasInitialInvestment=realCapital>1e-9||events.some(e=>e.week===0&&e.type==='purchase'&&e.amount<0),
+    breakEvenInitially=!hasInitialInvestment&&cash>=0,
+    horizon=horizonOverride===null?currentForecastWeeks():Math.max(1,Math.floor(num(horizonOverride,currentForecastWeeks())));
+
+  let breakEvenWeek=breakEvenInitially?0:null,
+    breakEvenSales=breakEvenInitially?0:null,
+    breakEvenCash=breakEvenInitially?cash:null;
     leadWeeks=Math.max(0,Math.ceil(state.salesPlanning.leadWeeks)),
     active=forecastActiveVariants();
 
@@ -1181,7 +1187,7 @@ function renderRealReinvestmentForecast(){
   el.innerHTML=`<div class="break-even-panel ${beReached?'reached':'pending'}">
     <div><div class="tiny">BREAK-EVEN-POINT</div><div class="break-even-main">${beText}</div></div>
     <div><div class="tiny">Verkäufe bis Break-even</div><strong>${beSales}</strong></div>
-    <div><div class="tiny">Bedeutung</div><span>Erster Zeitpunkt, an dem Verkäufe nach Ersteinkauf und allen nötigen Nachbestellungen das investierte Geld vollständig zurückverdient haben.</span></div>
+    <div><div class="tiny">Bedeutung</div><span>Erster Zeitpunkt nach dem echten bzw. simulierten Ersteinkauf, an dem der kumulierte Cashflow inklusive aller nötigen Nachbestellungen erstmals wieder mindestens 0 € erreicht.</span></div>
   </div>
   <div class="forecast-summary">
     <div class="production-kpi"><div class="label">Bisher echtes Einkaufskapital</div><div class="value">${euro(capital)}</div></div>
