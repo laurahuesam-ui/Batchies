@@ -281,14 +281,24 @@ function updatePackagingSupplierDerived(r){
 function bindPackagingSupplierEvents(){
   $$('.packaging-supplier-row').forEach(r=>{
     const name=r.querySelector('.packaging-supplier-name'),
-      customs=r.querySelector('.packaging-supplier-customs');
+      customs=r.querySelector('.packaging-supplier-customs'),
+      vat=r.querySelector('.packaging-supplier-vat-rate'),
+      payment=r.querySelector('.packaging-supplier-payment-fee-pct'),
+      vatIncluded=r.querySelector('.packaging-supplier-vat-included');
     let wasAlibaba=isAlibabaSupplierName(name.value);
 
     name.oninput=()=>{
       const now=isAlibabaSupplierName(name.value);
-      if(now&&!wasAlibaba)customs.checked=true;
+      if(now&&!wasAlibaba){
+        customs.checked=true;
+        if(vat)vat.value='19';
+        if(payment)payment.value='3';
+        if(vatIncluded)vatIncluded.checked=false
+      }
       wasAlibaba=now;
       customs.title=now?'Alibaba: 12 % Zoll automatisch vorausgewählt – kann ausgeschaltet werden':'12 % Zollpuffer auf Warenwert inklusive Versand';
+      if(vat)vat.title=now?'Alibaba: 19 % MwSt. automatisch vorausgewählt – kann geändert werden':'MwSt.-Satz des Lieferanten';
+      if(payment)payment.title=now?'Alibaba: 3 % Zahlungsgebühr automatisch vorausgewählt – kann geändert werden':'Prozentuale Zahlungsabwicklungsgebühr';
       updatePackagingSupplierDerived(r);
       updatePackagingTierUnitDisplays(r)
     };
@@ -410,7 +420,7 @@ function bindPackagingSupplierEvents(){
   })
 }
 function renderPackagingSupplierRows(list){
-  const rows=list?.length?list:[{id:crypto.randomUUID(),name:'',url:'',priceType:'unit',price:0,minOrderQty:1,unitIsSet:false,unitSetQty:1,setPrice:0,setQty:1,totalShipping:0,imageUrl:'',customs:false,preferred:true,priceTiers:[],shippingPoints:[]}];
+  const rows=list?.length?list:[{id:crypto.randomUUID(),name:'',url:'',priceType:'unit',price:0,minOrderQty:1,unitIsSet:false,unitSetQty:1,setPrice:0,setQty:1,totalShipping:0,imageUrl:'',paymentFeePct:0,vatRate:0,vatIncluded:false,customs:false,preferred:true,priceTiers:[],shippingPoints:[]}];
   $('#packagingSupplierRows').innerHTML=rows.map(packagingSupplierRowHtml).join('');
   $$('.packaging-supplier-row').forEach((r,i)=>renderPackagingTierData(r,rows[i]||{}));
   bindPackagingSupplierEvents();

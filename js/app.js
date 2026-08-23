@@ -237,7 +237,7 @@ $('#batchesTable').addEventListener('click',e=>{
   const key=btn.dataset.key;
   if(key)openBatch(key);
 });$('#searchProducts').oninput=renderProducts;$('#filterProductStatus').onchange=renderProducts;$('#filterProductBatch').onchange=renderProducts;$('#filterProductColor').onchange=renderProducts;$('#searchPackaging').oninput=renderPackaging;$('#searchBatches').oninput=renderBatches;const refreshSuggestions=$('#refreshBatchSuggestionsBtn');if(refreshSuggestions)refreshSuggestions.onclick=renderBatchSuggestions;
-$('#addSupplierBtn').onclick=()=>{const has=$$('#supplierRows .supplier-row').length;$('#supplierRows').insertAdjacentHTML('beforeend',supplierRowHtml({id:crypto.randomUUID(),name:'',url:'',priceType:'unit',price:0,minOrderQty:1,setPrice:0,setQty:1,totalShipping:0,imageUrl:'',customs:false,preferred:!has,priceTiers:[],shippingPoints:[]}));const nr=$$('.supplier-row').at(-1);if(nr)renderSupplierTierData(nr,{priceTiers:[],shippingPoints:[]});bindSupplierEvents();liveCalc()};
+$('#addSupplierBtn').onclick=()=>{const has=$$('#supplierRows .supplier-row').length;$('#supplierRows').insertAdjacentHTML('beforeend',supplierRowHtml({id:crypto.randomUUID(),name:'',url:'',priceType:'unit',price:0,minOrderQty:1,setPrice:0,setQty:1,totalShipping:0,imageUrl:'',paymentFeePct:0,vatRate:0,vatIncluded:false,customs:false,preferred:!has,priceTiers:[],shippingPoints:[]}));const nr=$$('.supplier-row').at(-1);if(nr)renderSupplierTierData(nr,{priceTiers:[],shippingPoints:[]});bindSupplierEvents();liveCalc()};
 $('#usePreferredPriceBtn').onclick=()=>{const s=preferredSupplier();if(s){$('#productBasePrice').value=supplierUnitPrice(s).toFixed(2);if(!$('#productImageUrl').value&&s.imageUrl){$('#productImageUrl').value=s.imageUrl;renderImagePreview(s.imageUrl)}liveCalc()}};
 $('#addCostBtn').onclick=()=>{$('#costRows').insertAdjacentHTML('beforeend','<div class="cost-row"><input class="cost-name" placeholder="Kostenposition"><input class="cost-amount" type="number" min="0" step="0.01" value="0"><button type="button" class="iconbtn remove-cost">✕</button></div>');bindCostEvents();liveCalc()};
 ['productBasePrice','shippingCost','shippingCharged','targetMargin','salePrice','useOffsite','useCurrency','useSetup'].forEach(id=>$('#'+id).addEventListener('input',liveCalc));$('#useRecommendedBtn').onclick=()=>{$('#salePrice').value=calcProduct(collectProductDraft()).recommended.toFixed(2);liveCalc()};
@@ -248,7 +248,7 @@ $$('.close-batch-dialog,.cancel-batch-dialog').forEach(b=>b.addEventListener('cl
 $$('.close-packaging-dialog,.cancel-packaging-dialog').forEach(b=>b.addEventListener('click',()=>$('#packagingDialog').close()));
 $('#addPackagingSupplierBtn').onclick=()=>{
   const has=$$('.packaging-supplier-row').length;
-  $('#packagingSupplierRows').insertAdjacentHTML('beforeend',packagingSupplierRowHtml({id:crypto.randomUUID(),name:'',url:'',priceType:'unit',price:0,minOrderQty:1,setPrice:0,setQty:1,totalShipping:0,imageUrl:'',customs:false,preferred:!has}));
+  $('#packagingSupplierRows').insertAdjacentHTML('beforeend',packagingSupplierRowHtml({id:crypto.randomUUID(),name:'',url:'',priceType:'unit',price:0,minOrderQty:1,setPrice:0,setQty:1,totalShipping:0,imageUrl:'',paymentFeePct:0,vatRate:0,vatIncluded:false,customs:false,preferred:!has}));
   bindPackagingSupplierEvents();
 };
 function persistBatchiesState(){localStorage.setItem(STORAGE_KEY,JSON.stringify(state))}
