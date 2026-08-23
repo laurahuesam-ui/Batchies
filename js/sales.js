@@ -1030,7 +1030,7 @@ function runRealReinvestmentForecast(horizonOverride=null){
 
   let breakEvenWeek=breakEvenInitially?0:null,
     breakEvenSales=breakEvenInitially?0:null,
-    breakEvenCash=breakEvenInitially?cash:null;
+    breakEvenCash=breakEvenInitially?cash:null,
     leadWeeks=Math.max(0,Math.ceil(state.salesPlanning.leadWeeks)),
     active=forecastActiveVariants();
 
@@ -1049,10 +1049,12 @@ function runRealReinvestmentForecast(horizonOverride=null){
     pendingOrders=pendingOrders.filter(o=>o.arrivalWeek>week);
 
     // 2) Forward-looking replenishment on PID/VID level.
-    // If ANY color of an item would run below its safety stock before a new
-    // delivery can arrive, calculate ONE combined order for ALL colors of that
-    // PID/VID. This prevents a pending order for one color from blocking the
-    // replenishment of the sibling colors.
+    // Core rule:
+    // - trigger early enough that CURRENT stock survives until the new shipment
+    // - order enough that the NEW shipment survives until the NEXT possible
+    //   shipment plus safety stock
+    // - neutral/flexible stock is one shared pool and may never be counted once
+    //   per color.
     const reorderGroups=new Map(),
       reqNow=weeklyRequirements(week),
       safetyWeeks=Math.max(0,Math.ceil(state.salesPlanning.safetyWeeks)),
@@ -1080,74 +1082,112 @@ function runRealReinvestmentForecast(horizonOverride=null){
       return total
     };
 
-    // Group every currently relevant color by PID/VID first.
     reqNow.forEach(r=>{
       const gk=r.kind+'|'+r.id;
       if(!reorderGroups.has(gk))reorderGroups.set(gk,{kind:r.kind,id:r.id,rows:[]});
       reorderGroups.get(gk).rows.push(r)
     });
 
+    const allocateSharedNeutral=(rows,neutralQty,demandField,exactField)=>{
+      let neutral=Math.max(0,num(neutralQty));
+      const out=rows.map(x=>{
+        const demand=Math.max(0,num(x[demandField])),
+          exact=Math.max(0,num(x[exactField])),
+          deficit=Math.max(0,demand-exact);
+        return {...x,deficit}
+      }).sort((a,b)=>b.deficit-a.deficit);
+
+      out.forEach(x=>{
+        const used=Math.min(neutral,x.deficit);
+        x.neutralUsed=used;
+        x.uncovered=Math.max(0,x.deficit-used);
+        neutral-=used
+      });
+      return{rows:out,neutralLeft:neutral,totalUncovered:out.reduce((a,x)=>a+x.uncovered,0)}
+    };
+
     reorderGroups.forEach(g=>{
-      // One shipment per PID/VID can be open at a time. Because every order below
-      // contains all colors required through arrival + safety horizon, this guard
-      // is now safe and does not starve sibling colors.
+      // An existing order is only allowed to block a new order because every
+      // order created by this version covers the full next replenishment cycle.
       if(pendingOrders.some(o=>o.kind===g.kind&&o.id===g.id)){
         g.skip=true;
         return
       }
 
       const arrivalWeek=week+leadWeeks,
-        safetyEnd=arrivalWeek+safetyWeeks-1,
-        coverEnd=Math.max(arrivalWeek,arrivalWeek+safetyWeeks), // +1 week breathing room
-        needs=[];
+        // Current stock must bridge exactly until the first shipment arrives.
+        preArrivalEnd=leadWeeks>0?arrivalWeek-1:week-1,
+        // After that first shipment arrives, the earliest follow-up order placed
+        // then would arrive another lead-time later. Cover that full cycle plus
+        // safety stock and one weekly review interval.
+        nextPossibleArrival=arrivalWeek+leadWeeks,
+        coverEnd=nextPossibleArrival+safetyWeeks,
+        neutralCurrent=forecastStockAvailable(stock,g.kind,g.id,''),
+        rowData=g.rows.map(r=>{
+          const exactCurrent=stock[planningStockKey(r.kind,r.id,r.color)]||0,
+            demandToArrival=futureDemand(r.kind,r.id,r.color,week,preArrivalEnd),
+            demandToCover=futureDemand(r.kind,r.id,r.color,week,coverEnd),
+            safetyDemand=safetyWeeks>0
+              ?futureDemand(r.kind,r.id,r.color,nextPossibleArrival,nextPossibleArrival+safetyWeeks-1)
+              :0,
+            overrideKey=planningStockKey(r.kind,r.id,r.color),
+            override=state.salesPlanning.reorderOverrides[overrideKey],
+            manualSafety=(override!==undefined&&override!==''&&Number.isFinite(Number(override)))
+              ?Math.max(0,num(override))
+              :0;
+          return{
+            ...r,
+            exactCurrent,
+            demandToArrival,
+            demandToCover,
+            safetyTarget:Math.max(safetyDemand,manualSafety)
+          }
+        });
 
-      let shouldOrder=false;
+      // FIRST question: can current exact stock + ONE shared neutral pool survive
+      // until the new order arrives?
+      const bridge=allocateSharedNeutral(rowData,neutralCurrent,'demandToArrival','exactCurrent');
 
-      g.rows.forEach(r=>{
-        const current=forecastStockAvailable(stock,r.kind,r.id,r.color),
-          pendingByArrival=pendingOrders.reduce((sum,o)=>{
-            if(o.kind!==r.kind||o.id!==r.id||o.arrivalWeek>arrivalWeek)return sum;
-            return sum+num(o.arrivals[r.color||''])+(r.color?num(o.arrivals['']):0)
-          },0),
-          demandUntilArrival=leadWeeks>0
-            ?futureDemand(r.kind,r.id,r.color,week,arrivalWeek-1)
-            :0,
-          projectedAtArrival=current+pendingByArrival-demandUntilArrival,
-          automaticSafety=safetyWeeks>0
-            ?futureDemand(r.kind,r.id,r.color,arrivalWeek,safetyEnd)
-            :0,
-          overrideKey=planningStockKey(r.kind,r.id,r.color),
-          override=state.salesPlanning.reorderOverrides[overrideKey],
-          safetyTarget=(override!==undefined&&override!==''&&Number.isFinite(Number(override)))
-            ?Math.max(0,num(override))
-            :automaticSafety;
-
-        if(projectedAtArrival<=safetyTarget+1e-9)shouldOrder=true;
-
-        // Required inventory from NOW through arrival, safety horizon and one
-        // extra forecast week. We subtract what is physically/pending available.
-        const demandThroughCover=futureDemand(r.kind,r.id,r.color,week,coverEnd),
-          wanted=Math.max(demandThroughCover,safetyTarget+demandUntilArrival),
-          short=Math.max(0,wanted-(current+pendingByArrival));
-
-        needs.push({
-          ...r,
-          short,
-          projectedAtArrival,
-          safetyTarget,
-          arrivalWeek
-        })
+      // Keep configured manual safety stock at arrival as an additional trigger.
+      const projectedRows=bridge.rows.map(x=>({
+        ...x,
+        projectedAtArrival:Math.max(0,x.exactCurrent-x.demandToArrival)+(x.neutralUsed?0:0)
+      }));
+      const safetyTrigger=projectedRows.some(x=>{
+        const exactAfter=Math.max(0,x.exactCurrent-x.demandToArrival);
+        return exactAfter<x.safetyTarget-1e-9
       });
+
+      // Also retain the percentage / conventional reorder point as an early
+      // warning, but calculate it from the real shared stock only once.
+      const aggregateCurrent=g.rows.reduce((a,r)=>a+(stock[planningStockKey(r.kind,r.id,r.color)]||0),0)+neutralCurrent,
+        aggregatePoint=g.rows.reduce((a,r)=>a+reorderPointFor(r),0),
+        shouldOrder=bridge.totalUncovered>1e-9||aggregateCurrent<=aggregatePoint+1e-9||safetyTrigger;
 
       if(!shouldOrder){
         g.skip=true;
         return
       }
 
-      // When one color triggers, include all sibling colors that need stock over
-      // the same delivery/safety horizon in this single supplier order.
-      g.needs=needs.filter(x=>x.short>1e-9);
-      if(!g.needs.length)g.skip=true
+      // SECOND question: how much must the new order contain?
+      // Target stock covers demand from now through the NEXT possible arrival
+      // (2 × lead time from today) plus safety/review interval.
+      const targetAllocation=allocateSharedNeutral(rowData,neutralCurrent,'demandToCover','exactCurrent');
+
+      g.needs=targetAllocation.rows
+        .map(x=>({
+          ...x,
+          short:Math.max(0,x.uncovered),
+          projectedAtArrival:x.exactCurrent-x.demandToArrival,
+          arrivalWeek,
+          coverEnd
+        }))
+        .filter(x=>x.short>1e-9);
+
+      if(!g.needs.length){
+        g.skip=true;
+        return
+      }
     });
 
     [...reorderGroups.entries()].forEach(([k,g])=>{if(g.skip)reorderGroups.delete(k)});
@@ -1175,7 +1215,7 @@ function runRealReinvestmentForecast(horizonOverride=null){
         cost=o.cost;
         let left=o.ordered;
 
-        // Allocate ordered pieces to the actual color needs first.
+        // Ordered pieces go to the concrete future color deficits first.
         g.needs
           .slice()
           .sort((a,b)=>b.short-a.short)
@@ -1186,9 +1226,10 @@ function runRealReinvestmentForecast(horizonOverride=null){
               left-=a
             }
           });
+        // MOQ / active shipping-point surplus remains flexible for any color.
         if(left>1e-9)arrivals['']=(arrivals['']||0)+left;
 
-        text=`${g.id} · ${o.ordered} Stück bestellen (Bedarf ${Math.ceil(missing)} · MOQ ${o.moq}${o.recommended?' · nahe Versandoption insgesamt günstiger':''})`
+        text=`${g.id} · ${o.ordered} Stück bestellen (Bedarf bis Folge-Lieferung ${Math.ceil(missing)} · MOQ ${o.moq}${o.recommended?' · nahe Versandoption insgesamt günstiger':''})`
       }
 
       cash-=cost;
@@ -1204,11 +1245,9 @@ function runRealReinvestmentForecast(horizonOverride=null){
         pendingOrders.push({kind:g.kind,id:g.id,arrivals,arrivalWeek,cost})
       }
 
-      const minProjected=Math.min(...g.needs.map(x=>x.projectedAtArrival)),
-        maxSafety=Math.max(...g.needs.map(x=>x.safetyTarget));
       events.push({
         week,type:'reorder',
-        text:`${text}${leadWeeks?` · Ankunft ca. Woche ${arrivalWeek}`:''} · voraussichtlicher Mindestbestand bei Ankunft ${minProjected.toFixed(1)} · Sicherheitsziel bis ${maxSafety.toFixed(1)}`,
+        text:`${text}${leadWeeks?` · Ankunft ca. Woche ${arrivalWeek}`:''} · Vorrat geplant bis mindestens Woche ${Math.max(...g.needs.map(x=>x.coverEnd))}`,
         amount:-cost
       })
     });
