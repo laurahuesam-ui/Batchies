@@ -1048,32 +1048,82 @@ function runRealReinvestmentForecast(horizonOverride=null){
     });
     pendingOrders=pendingOrders.filter(o=>o.arrivalWeek>week);
 
-    // 2) Reorder BEFORE this week's sales if stock + already pending quantity
-    // falls to the dynamic lead-time/safety threshold.
-    const reorderGroups=new Map(),reqWeekly=weeklyRequirements(week);
+    // 2) Reorder BEFORE this week's sales using a forward-looking arrival forecast.
+    // We do NOT wait until current stock is low. Instead we project what will be
+    // left when a new order could actually arrive, then preserve the configured
+    // safety stock beyond that arrival.
+    const reorderGroups=new Map(),reqWeekly=weeklyRequirements(week),
+      safetyWeeks=Math.max(0,Math.ceil(state.salesPlanning.safetyWeeks)),
+      demandCache=new Map();
+
+    const demandForWeek=w=>{
+      if(!demandCache.has(w)){
+        const m=new Map();
+        weeklyRequirements(w).forEach(x=>{
+          const k=planningStockKey(x.kind,x.id,x.color);
+          m.set(k,(m.get(k)||0)+x.weekly)
+        });
+        demandCache.set(w,m)
+      }
+      return demandCache.get(w)
+    };
+
+    const demandBetween=(r,fromWeek,toWeek)=>{
+      if(toWeek<fromWeek)return 0;
+      const k=planningStockKey(r.kind,r.id,r.color);
+      let total=0;
+      for(let w=fromWeek;w<=toWeek;w++)total+=num(demandForWeek(w).get(k));
+      return total
+    };
 
     reqWeekly.forEach(r=>{
-      const current=forecastStockAvailable(stock,r.kind,r.id,r.color),
-        pending=pendingOrders.reduce((sum,o)=>{
-          if(o.kind!==r.kind||o.id!==r.id)return sum;
+      const itemHasPending=pendingOrders.some(o=>o.kind===r.kind&&o.id===r.id);
+      // One open purchase per PID/VID at a time. Its quantities and arrival are
+      // already part of the projection, so do not create duplicate orders.
+      if(itemHasPending)return;
+
+      const arrivalWeek=week+leadWeeks,
+        current=forecastStockAvailable(stock,r.kind,r.id,r.color),
+        pendingByArrival=pendingOrders.reduce((sum,o)=>{
+          if(o.kind!==r.kind||o.id!==r.id||o.arrivalWeek>arrivalWeek)return sum;
           return sum+num(o.arrivals[r.color||''])+(r.color?num(o.arrivals['']):0)
         },0),
-        effective=current+pending,
-        point=reorderPointFor(r);
+        // Order is placed before this week's sales. With lead time 3, current
+        // stock must cover weeks W, W+1 and W+2; goods arrive at start of W+3.
+        demandUntilArrival=leadWeeks>0?demandBetween(r,week,arrivalWeek-1):0,
+        projectedAtArrival=current+pendingByArrival-demandUntilArrival,
+        safetyDemand=safetyWeeks>0?demandBetween(r,arrivalWeek,arrivalWeek+safetyWeeks-1):0,
+        manualPoint=state.salesPlanning.reorderOverrides[planningStockKey(r.kind,r.id,r.color)],
+        explicitSafety=(manualPoint!==undefined&&manualPoint!==''&&Number.isFinite(Number(manualPoint)))
+          ?Math.max(0,num(manualPoint))
+          :safetyDemand,
+        requiredAtArrival=Math.max(safetyDemand,explicitSafety);
 
-      if(effective>point+1e-9)return;
+      // Trigger while there is still enough stock to bridge the delivery time.
+      if(projectedAtArrival>requiredAtArrival+1e-9)return;
 
-      const target=r.weekly*(state.salesPlanning.leadWeeks+state.salesPlanning.safetyWeeks+1),
-        missing=Math.max(0,target-effective);
+      // Buy enough to cover the lead-time demand already in front of us, retain
+      // the desired safety stock after arrival, and carry one additional forecast
+      // week so the next reorder is not triggered immediately.
+      const extraWeekDemand=demandBetween(r,arrivalWeek+safetyWeeks,arrivalWeek+safetyWeeks),
+        targetFromNow=demandUntilArrival+requiredAtArrival+extraWeekDemand,
+        effectiveNow=current+pendingByArrival,
+        missing=Math.max(0,targetFromNow-effectiveNow);
       if(missing<=1e-9)return;
 
       const k=r.kind+'|'+r.id;
       if(!reorderGroups.has(k))reorderGroups.set(k,{kind:r.kind,id:r.id,needs:[]});
-      reorderGroups.get(k).needs.push({...r,short:missing})
+      reorderGroups.get(k).needs.push({
+        ...r,
+        short:missing,
+        projectedAtArrival,
+        safetyTarget:requiredAtArrival,
+        arrivalWeek
+      })
     });
 
     reorderGroups.forEach(g=>{
-      // Never place another order for the same item while one is already pending.
+      // A second guard at item level protects shared MOQ/set purchases.
       if(pendingOrders.some(o=>o.kind===g.kind&&o.id===g.id))return;
 
       const s=planningPreferredSupplier(g.kind,g.id);if(!s)return;
@@ -1118,9 +1168,12 @@ function runRealReinvestmentForecast(horizonOverride=null){
         pendingOrders.push({kind:g.kind,id:g.id,arrivals,arrivalWeek,cost})
       }
 
+      const triggerInfo=g.needs.length
+        ?` · prognostiziert bei Ankunft ${Math.min(...g.needs.map(x=>x.projectedAtArrival)).toFixed(1)} · Sicherheitsziel ${Math.max(...g.needs.map(x=>x.safetyTarget)).toFixed(1)}`
+        :'';
       events.push({
         week,type:'reorder',
-        text:`${text}${leadWeeks?` · Ankunft ca. Woche ${arrivalWeek}`:''}`,
+        text:`${text}${leadWeeks?` · Ankunft ca. Woche ${arrivalWeek}`:''}${triggerInfo}`,
         amount:-cost
       })
     });
