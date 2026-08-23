@@ -966,7 +966,7 @@ function forecastShortageKey(r){return planningStockKey(r.kind,r.id,r.color)}
 function forecastShortageLabel(r){
   return `${r.id} · ${warehouseItemName(r.kind,r.id)}${r.color?' · '+r.color:''}`
 }
-function runRealReinvestmentForecast(){
+function runRealReinvestmentForecast(horizonOverride=null){
   ensureSalesPlanning();
 
   let stock=cloneForecastStock(),
@@ -993,7 +993,7 @@ function runRealReinvestmentForecast(){
     })
   }
 
-  const horizon=currentForecastWeeks(),
+  const horizon=horizonOverride===null?currentForecastWeeks():Math.max(1,Math.floor(num(horizonOverride,currentForecastWeeks()))),
     leadWeeks=Math.max(0,Math.ceil(state.salesPlanning.leadWeeks)),
     active=forecastActiveVariants();
 
@@ -1145,19 +1145,38 @@ function runRealReinvestmentForecast(){
     shortages:[...shortageMap.values()].sort((a,b)=>b.lostSales-a.lostSales)
   }
 }
+function findRealReinvestmentBreakEven(){
+  const visibleWeeks=currentForecastWeeks(),
+    visible=runRealReinvestmentForecast(visibleWeeks);
+  if(visible.breakEvenWeek!==null)return{...visible,searchWeeks:visibleWeeks,found:true};
+
+  // Continue the identical week-by-week model farther into the future.
+  // We rerun from week 0 for each extension so stock, MOQ/set purchases,
+  // delivery lead times, growth forecast and reinvestments remain identical.
+  const maxWeeks=1040; // 20 years: practical guard against endless simulations
+  let weeks=Math.max(visibleWeeks+1,Math.ceil(visibleWeeks/25)*25);
+  while(weeks<=maxWeeks){
+    const r=runRealReinvestmentForecast(weeks);
+    if(r.breakEvenWeek!==null)return{...r,searchWeeks:weeks,found:true};
+    if(weeks===maxWeeks)break;
+    weeks=Math.min(maxWeeks,weeks+Math.max(25,Math.ceil(weeks*.2)))
+  }
+  return{...runRealReinvestmentForecast(maxWeeks),searchWeeks:maxWeeks,found:false}
+}
 function renderRealReinvestmentForecast(){
   const el=$('#realReinvestmentForecast');if(!el)return;
   const r=runRealReinvestmentForecast(),
+    be=findRealReinvestmentBreakEven(),
     capital=reconstructedActualPurchaseCapital(),
     recovered=actualRecoveredCash(),
     period=forecastPeriodLabel(),
     netChange=r.cash-r.initialCash;
 
-  const beReached=r.breakEvenWeek!==null,
+  const beReached=be.breakEvenWeek!==null,
     beText=beReached
-      ? (r.breakEvenWeek===0?'Bereits erreicht':`Woche ${r.breakEvenWeek}`)
-      : `Nicht innerhalb ${period}`,
-    beSales=beReached&&r.breakEvenSales!==null?r.breakEvenSales.toFixed(1):'–';
+      ? (be.breakEvenWeek===0?'Bereits erreicht':`Woche ${be.breakEvenWeek}`)
+      : 'Mit aktueller Prognose nicht erreicht',
+    beSales=beReached&&be.breakEvenSales!==null?be.breakEvenSales.toFixed(1):'–';
 
   el.innerHTML=`<div class="break-even-panel ${beReached?'reached':'pending'}">
     <div><div class="tiny">BREAK-EVEN-POINT</div><div class="break-even-main">${beText}</div></div>
@@ -1167,7 +1186,7 @@ function renderRealReinvestmentForecast(){
   <div class="forecast-summary">
     <div class="production-kpi"><div class="label">Bisher echtes Einkaufskapital</div><div class="value">${euro(capital)}</div></div>
     <div class="production-kpi"><div class="label">Bisheriger Rückfluss aus Verkäufen</div><div class="value">${euro(recovered)}</div></div>
-    <div class="production-kpi"><div class="label">Break-even-Punkt</div><div class="value">${r.breakEvenWeek===null?'nicht innerhalb '+period:r.breakEvenWeek===0?'bereits erreicht':`Woche ${r.breakEvenWeek}`}</div><div class="tiny">${r.breakEvenSales===null?'–':`${r.breakEvenSales.toFixed(1)} simulierte Verkäufe bis dahin`}</div></div>
+    <div class="production-kpi"><div class="label">Break-even-Punkt</div><div class="value">${beText}</div><div class="tiny">${beReached?`${beSales} simulierte Verkäufe bis dahin · freies Geld ab dann ${euro(be.breakEvenCash)}`:`auch nach ${be.searchWeeks} Wochen nicht positiv`}</div></div>
     <div class="production-kpi"><div class="label">Erwartete Nachfrage (${period})</div><div class="value">${r.expectedDemand.toFixed(1)}</div><div class="tiny">${r.weeklyTarget.toFixed(2).replace('.',',')} Verkäufe/Woche insgesamt</div></div>
     <div class="production-kpi"><div class="label">Voraussichtlich lieferbar</div><div class="value">${r.totalForecastSales.toFixed(1)}</div><div class="tiny">${r.expectedDemand>0?(r.totalForecastSales/r.expectedDemand*100).toFixed(1).replace('.',','):'0,0'} % der erwarteten Nachfrage</div></div>
     <div class="production-kpi"><div class="label">Gefährdet / nicht lieferbar</div><div class="value">${r.lostSales.toFixed(1)}</div><div class="tiny">${r.expectedDemand>0?(r.lostSales/r.expectedDemand*100).toFixed(1).replace('.',','):'0,0'} % der erwarteten Nachfrage</div></div>
@@ -1177,7 +1196,11 @@ function renderRealReinvestmentForecast(){
     <strong>Voraussichtliches frei verfügbares Geld nach ${period}: ${euro(r.cash)}</strong><br>
     Das ist der simulierte Cash-Bestand nach Verkäufen und allen bis dahin nötigen Nachbestellungen. 
     ${netChange>=0?`Gegenüber dem Start der Prognose steigt der freie Cash-Bestand um ${euro(netChange)}.`:`Gegenüber dem Start der Prognose sinkt der freie Cash-Bestand um ${euro(Math.abs(netChange))}.`}
-    ${r.breakEvenWeek===null?' Das bisher investierte Einkaufskapital wäre in diesem Zeitraum noch nicht vollständig zurückverdient.':` Der Break-even ist der erste Zeitpunkt, an dem der kumulierte Cashflow nach Einkauf, Verkäufen und notwendigen Nachbestellungen wieder mindestens 0 € erreicht.`}
+    ${beReached
+      ? (be.breakEvenWeek>currentForecastWeeks()
+          ? ` Im gewählten Zeitraum ist der Break-even noch nicht erreicht. Bei unveränderter Prognose wird das freie Geld erstmals in <strong>Woche ${be.breakEvenWeek}</strong> positiv bzw. mindestens 0 € (${euro(be.breakEvenCash)}).`
+          : ` Der Break-even wird in <strong>Woche ${be.breakEvenWeek}</strong> erreicht; dort ist der kumulierte Cashflow nach Einkauf, Verkäufen und notwendigen Nachbestellungen erstmals mindestens 0 €.`)
+      : ` Mit der aktuellen Verkaufs-, Kosten-, Lager- und Nachbestellprognose wird innerhalb von ${be.searchWeeks} Wochen kein positiver kumulierter Cashflow erreicht.`}
   </div>
   ${r.shortages.length?`<details class="shortage-details" style="margin-top:10px" open>
     <summary>Warum Verkäufe gefährdet sind (${r.shortages.length} Engpässe)</summary>
