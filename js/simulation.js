@@ -664,6 +664,40 @@ function salesGrowthStagePurchaseListHtml(purchase){
     </div>`
   }).join('')}</div>`
 }
+
+function salesGrowthAuthoritativeStartForecast(){
+  // Exactly the same BE search used by the "Verkäufe" tab.
+  if(typeof findRealReinvestmentBreakEven!=='function'||typeof runRealReinvestmentForecast!=='function')return null;
+  const be=findRealReinvestmentBreakEven();
+  if(be.breakEvenWeek===null)return{be,atBreakEven:null};
+
+  // Re-run only through the BE week so stock/cash are the state AT break-even,
+  // not the state at the end of the longer search horizon.
+  const atBreakEven=runRealReinvestmentForecast(Math.max(1,be.breakEvenWeek));
+  return{be,atBreakEven}
+}
+function salesGrowthStockFromForecast(forecastStock){
+  const stock={};
+  Object.entries(forecastStock||{}).forEach(([key,qty])=>{
+    const parts=String(key).split('|'),
+      id=parts[1];
+    if(!id)return;
+    stock[id]=(stock[id]||0)+Math.max(0,num(qty))
+  });
+  return stock
+}
+function salesGrowthReordersFromForecast(events=[],untilWeek=null){
+  return (events||[])
+    .filter(e=>e.type==='reorder'&&(untilWeek===null||num(e.week)<=untilWeek))
+    .map(e=>({
+      saleNumber:null,
+      week:e.week,
+      id:(String(e.text||'').match(/(?:PID|VID)-\d+/)||['Nachbestellung'])[0],
+      name:String(e.text||''),
+      orderedQty:0,
+      cost:Math.abs(num(e.amount))
+    }))
+}
 function renderSalesGrowthSimulation(){
   const el=$('#salesSimulationContent');if(!el)return;
   ensureSalesGrowthState();salesGrowthSanitizeStages();
@@ -679,17 +713,38 @@ function renderSalesGrowthSimulation(){
   }
 
   const stageBatches=state.salesGrowthSimulation.stages.map(k=>state.batches.find(b=>b.key===k)).filter(Boolean),
-    active=[source],stock={},counts=new Map([[source.key,0]]),reorders=[];
+    active=[source],
+    authoritative=salesGrowthAuthoritativeStartForecast();
 
-  // Start cash is negative initial investment; stock exists after purchase.
-  let cash=-sourcePurchase.total,totalSales=0,rr=0,sourceBreakEvenAt=null;
-  salesGrowthAddStock(stock,sourcePurchase);
+  if(!authoritative){
+    el.innerHTML='<div class="hint negative"><strong>Forecast-Engine nicht verfügbar.</strong> Die Reinvestitionssimulation kann den identischen Break-even nicht berechnen.</div>';
+    return
+  }
+
+  const be=authoritative.be,
+    beState=authoritative.atBreakEven,
+    stock=beState?salesGrowthStockFromForecast(beState.stock):{},
+    sourceReorders=salesGrowthReordersFromForecast(beState?.events||be.events||[],be.breakEvenWeek),
+    reorders=[...sourceReorders],
+    startSales=Math.max(0,num(be.breakEvenSales)),
+    counts=new Map([[source.key,startSales]]);
+
+  // The chain starts exactly at the same state where the Verkäufe forecast
+  // reaches break-even. No second start-BE algorithm exists anymore.
+  let cash=beState?num(beState.breakEvenCash,beState.cash):num(be.breakEvenCash),
+    totalSales=startSales,
+    rr=0,
+    sourceBreakEvenAt=be.breakEvenWeek===null?null:{
+      week:be.breakEvenWeek,
+      totalSales:startSales,
+      counts:Object.fromEntries(counts),
+      cash:num(be.breakEvenCash)
+    };
 
   const stageResults=[];
   const MAX_SALES=10000;
-  let stopReason='';
+  let stopReason=be.breakEvenWeek===null?'Break-even wird mit der aktuellen Verkaufsprognose nicht erreicht':'';
 
-  const cashCheckpoints=[];
   function oneSale(){
     if(totalSales>=MAX_SALES){stopReason='Sicherheitsgrenze erreicht';return false}
     const b=active[rr%active.length];rr++;
@@ -700,30 +755,12 @@ function renderSalesGrowthSimulation(){
     cash+=salesGrowthNonMaterialCashPerSale(b);
     totalSales++;
     counts.set(b.key,(counts.get(b.key)||0)+1);
-    if(sourceBreakEvenAt===null&&cash>=0)sourceBreakEvenAt={totalSales,counts:Object.fromEntries(counts),cash};
-
-    // Detect a genuinely negative long-run cash-flow instead of looping to 100,000.
-    if(totalSales%100===0){
-      cashCheckpoints.push({sales:totalSales,cash});
-      if(!sourceBreakEvenAt&&cashCheckpoints.length>=4){
-        const recent=cashCheckpoints.slice(-4);
-        const strictlyDown=recent.every((x,i)=>i===0||x.cash<recent[i-1].cash-1);
-        if(strictlyDown&&cash<-sourcePurchase.total*2){
-          stopReason='Cashflow bleibt trotz Verkäufen negativ – Nachbestellkosten übersteigen den erwirtschafteten freien Cashflow';
-          return false
-        }
-      }
-    }
     return true
   }
 
-  // First, amortize source business.
-  // Keep these reorders separate so the start phase is transparent too.
-  const sourceReorderStart=reorders.length;
-  while(cash<0&&totalSales<MAX_SALES){
-    if(!oneSale())break
-  }
-  const sourceReorders=reorders.slice(sourceReorderStart);
+  // If the authoritative Verkäufe forecast never reaches BE, there is no
+  // positive start state from which a reinvestment chain can responsibly begin.
+  if(!sourceBreakEvenAt)stageBatches.length=0;
 
   // Then finance and amortize each target.
   // A stage is complete only when:
@@ -795,7 +832,7 @@ function renderSalesGrowthSimulation(){
 
   el.innerHTML=`<div class="sales-chain-summary">
     <div class="production-kpi"><div class="label">Start-Investition</div><div class="value">${euro(sourcePurchase.total)}</div></div>
-    <div class="production-kpi"><div class="label">Start-Batch amortisiert</div><div class="value">${sourceBreakEvenAt?sourceBreakEvenAt.totalSales+' Verkäufe':'nicht erreicht'}</div></div>
+    <div class="production-kpi"><div class="label">Start-Break-even · identisch mit Verkäufe</div><div class="value">${sourceBreakEvenAt?`Woche ${sourceBreakEvenAt.week}`:'nicht erreicht'}</div><div class="tiny">${sourceBreakEvenAt?`${sourceBreakEvenAt.totalSales.toFixed(1)} prognostizierte Verkäufe bis dahin`:'gleiche Forecast-Engine wie im Verkäufe-Reiter'}</div></div>
     <div class="production-kpi"><div class="label">Gesamtverkäufe simuliert</div><div class="value">${totalSales}</div><div class="tiny">${stopReason&&!sourceBreakEvenAt?esc(stopReason):'Simulation bis zum relevanten Ziel'}</div></div>
     <div class="production-kpi"><div class="label">Freies Geld am Ende</div><div class="value ${cash>=0?'positive':'negative'}">${euro(cash)}</div></div>
     <div class="production-kpi"><div class="label">Nachbestellungen gesamt</div><div class="value">${reorders.length}</div><div class="tiny">davon ${sourceReorders.length} bis Start-Amortisation</div></div>
@@ -803,16 +840,16 @@ function renderSalesGrowthSimulation(){
 
   ${!sourceBreakEvenAt&&stopReason?`<div class="hint negative" style="margin-bottom:10px"><strong>Simulation gestoppt:</strong> ${esc(stopReason)}. Die Simulation läuft nicht mehr blind bis 100.000 Verkäufe weiter. Prüfe bei den betroffenen Artikeln aktive Bestellmenge, Preis, Versand und Set/MOQ.</div>`:''}
   <div class="sales-chain-stage done">
-    <div class="sales-chain-stage-head"><div><div class="sales-chain-stage-title">Start · ${esc(source.bid)} · ${esc(source.name)}</div><div class="tiny">1. AK und Amortisation</div></div><span class="badge ready">${sourceBreakEvenAt?'amortisiert':'offen'}</span></div>
+    <div class="sales-chain-stage-head"><div><div class="sales-chain-stage-title">Start · ${esc(source.bid)} · ${esc(source.name)}</div><div class="tiny">Startphase vollständig aus derselben Verkaufs-, Lager- und Nachbestellprognose wie im Reiter „Verkäufe“</div></div><span class="badge ready">${sourceBreakEvenAt?'amortisiert':'offen'}</span></div>
     <div class="sales-chain-kpis">
       <div><div class="kpi-label">1. AK</div><strong>${euro(sourcePurchase.total)}</strong></div>
       <div><div class="kpi-label">Cash je Verkauf vor Material-Nachkauf</div><strong>${euro(cashPerSaleSource)}</strong></div>
-      <div><div class="kpi-label">Break-even nach</div><strong>${sourceBreakEvenAt?sourceBreakEvenAt.totalSales+' Verkäufen':'–'}</strong></div>
-      <div><div class="kpi-label">Verkäufe Start-Batch bis Break-even</div><strong>${sourceBreakEvenAt?(sourceBreakEvenAt.counts[source.key]||0):'–'}</strong></div>
+      <div><div class="kpi-label">Break-even</div><strong>${sourceBreakEvenAt?`Woche ${sourceBreakEvenAt.week}`:'–'}</strong></div>
+      <div><div class="kpi-label">Prognostizierte Verkäufe bis Break-even</div><strong>${sourceBreakEvenAt?sourceBreakEvenAt.totalSales.toFixed(1):'–'}</strong></div>
     </div>
     <details><summary>Was wurde für die 1. AK gekauft?</summary>${salesGrowthStagePurchaseListHtml(sourcePurchase)}</details>
     <details open><summary>Nachbestellungen bis zur Amortisation (${sourceReorders.length})</summary>
-      ${sourceReorders.length?`<div class="sales-reorder-list">${sourceReorders.map(x=>`<div class="sales-reorder-line"><span>Verkauf ${x.saleNumber}</span><span>${esc(x.id)} · ${esc(x.name)} · ${x.orderedQty} nachbestellt</span><strong>${euro(x.cost)}</strong></div>`).join('')}</div>`:'<div class="tiny">Keine Nachbestellungen bis zur Amortisation nötig.</div>'}
+      ${sourceReorders.length?`<div class="sales-reorder-list">${sourceReorders.map(x=>`<div class="sales-reorder-line"><span>${x.week!=null?'Woche '+x.week:'Verkauf '+x.saleNumber}</span><span>${esc(x.name)}</span><strong>${euro(x.cost)}</strong></div>`).join('')}</div>`:'<div class="tiny">Keine Nachbestellungen bis zur Amortisation nötig.</div>'}
     </details>
   </div>
 
@@ -871,7 +908,8 @@ function renderSalesGrowthSimulation(){
     </div>`
   }).join('')}
 
-  <div class="tiny" style="margin-top:10px">Modellannahme: Vor jedem neuen Ziel-Batch wird zuerst der gemeinsame virtuelle Lagerbestand geprüft. Nur fehlende Positionen werden nachgekauft. <strong>Sofort nach dem Kauf wird es selbst aktiv und ab der nächsten Verkaufsrunde mitverkauft. Eine Stufe endet erst, wenn die neue 1. AK durch die gemeinsamen Verkäufe wieder verdient wurde.</strong> Sobald mehrere Batches aktiv sind, werden sie reihum verkauft. Materialkosten werden als echte Bestellungen verbucht, nicht als geglätteter EK pro Verkauf; Arbeitszeit, Etsy-Gebühren, Werbung/Risiko, Kundenversand und Fixkosten-Umlage werden pro Verkauf berücksichtigt.</div>`
+  <div class="info" style="margin-top:10px"><strong>Start-Break-even ist jetzt dieselbe Kennzahl wie im Reiter „Verkäufe“.</strong> Verwendet werden dieselbe Bestellliste, dieselben Farbvarianten, dieselbe dynamische Wochenprognose, Lieferzeiten und Nachbestelllogik. Erst die optionale Wachstumskette nach diesem Punkt simuliert zusätzliche Ziel-Batches.</div>
+  <div class="tiny" style="margin-top:10px">Modellannahme der Wachstumskette: Vor jedem neuen Ziel-Batch wird zuerst der gemeinsame virtuelle Lagerbestand geprüft. Nur fehlende Positionen werden nachgekauft. <strong>Sofort nach dem Kauf wird es selbst aktiv und ab der nächsten Verkaufsrunde mitverkauft. Eine Stufe endet erst, wenn die neue 1. AK durch die gemeinsamen Verkäufe wieder verdient wurde.</strong> Sobald mehrere Batches aktiv sind, werden sie reihum verkauft. Materialkosten werden als echte Bestellungen verbucht, nicht als geglätteter EK pro Verkauf; Arbeitszeit, Etsy-Gebühren, Werbung/Risiko, Kundenversand und Fixkosten-Umlage werden pro Verkauf berücksichtigt.</div>`
 }
 function initSalesSimulation(){
   const source=$('#salesSimSource'),add=$('#salesSimAddStageBtn'),suggest=$('#salesSimSuggestBtn');
